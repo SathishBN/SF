@@ -5,11 +5,23 @@ install_github("toolbox", "drewgriffith15")
 require(toolbox)
 load.packages('forecast,quantmod,toolbox')
 
-# LOAD DATA
-ticker = toupper('SPY')
-data = getSymbols(ticker, src='yahoo',from='1980-01-01', auto.assign=F)
-adj.close = coredata(Ad(data))
-dates = index(data)
+# LOAD DATA USING CURRENT QUOTES LOGIC
+# ONLY SUPPORTS ONE STOCK CURRENTLY
+tickers = toupper(spl('SPY')) 
+data <- new.env()
+data = getSymbols(tickers, src = 'yahoo', from = '1980-01-01', env = data, auto.assign = T)
+for(i in ls(data)) data[[i]] = adjustOHLC(data[[i]], use.Adjusted=T)
+quotes = getQuote(tickers)
+for(i in ls(data))
+  if( last(index(data[[i]])) < as.Date(quotes[i, 'Trade Time']) ) {
+    data[[i]] = rbind( data[[i]], make.xts(quotes[i, spl('Open,High,Low,Last,Volume,Last')],
+                                           as.Date(quotes[i, 'Trade Time'])))
+  }
+bt.prep(data)
+summary(data$prices)
+
+adj.close = data$prices
+dates = data$dates
 n.hist=45; n.fore=15
 
 # FIND MATCHES
@@ -19,40 +31,37 @@ summary(fit)
 mean(1-abs((fm$rmodel$Y-fit$fitted.values)/fm$rmodel$Y))
 
 # PLOT MATCHES
-n.match = NROW(fm$matchindx)
-max.index = fm$matchindx
-d.matches = index(data)[1:NROW(data)]
-thm = chart_theme()
-thm$col$line.col = 'lightblue'
-chart_Series(Ad(data), theme=thm,name=paste(ticker,"- Pattern Matches"))
-add_Series(last(Ad(data),(n.hist+1)), col = 'blue', on=1)
-#text(9, mean(Ad(data)), "Pattern Matches", adj=0);
-for (i in 1:n.match){
-  adj=Ad(data)[(max.index[i] - n.hist + 1):max.index[i]]
-  add_Series(adj, on=1)
-}
-add_Series(adj, on=1) #BUG?? SHOULDN'T NEED THIS...
+# n.match = NROW(fm$matchindx)
+# max.index = fm$matchindx
+# d.matches = index(data)[1:NROW(data)]
+# plota(data, type='l', col='gray', main=tickers)
+# plota.lines(last(data,n.hist), col='blue')
+# for(i in 1:n.match) {
+#   plota.lines(data[(max.index[i]-n.hist+1):max.index[i]], col='red')
+# }
+# text(index(data)[max.index - n.hist], adj.close[max.index - n.hist], 1:n.match, 
+#      adj=c(1,-1), col='black',xpd=TRUE)
+# plota.legend('Pattern,Matches','blue,red')
 
 # BUILD FORECAST
 newdf = fm$fmodel
 forecast = forecast.lm(fit, newdata=newdf)
 forecast = forecast$mean
-y = as.xts(last(data[,6],180), 
-           index(data)[(NROW(data)-(n.hist-1)):NROW(data)])
+y = as.xts(last(adj.close,180),           
+           index(dates)[(NROW(dates)-(n.hist-1)):NROW(dates)])
 z = extendForecast(dates, round(forecast,2))
-out = rbind(y,z)
-colnames(out) = "Adj.Close"
+out = rbind(y,z); colnames(out) = "Adj.Close"
 
 # QUICK TECHNICAL REVIEW
 thm = chart_theme()
 thm$col$line.col = 'blue'
-chart_Series(out, theme=thm,name=ticker)
+chart_Series(out, theme=thm,name=tickers)
 add_Series(last(out,(n.fore+1)),on=1)
 add_SMA(n=50, col = "gray")
 add_RSI(n=14)
 add_BBands()
 
-# OUTPUT = PREVIOUS CLOSING + FORECAST
+# OUTPUT = CURRENT PRICE + FORECAST
 tail(out,n.fore+1)
 
 ##########################################################################
