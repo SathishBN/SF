@@ -7,9 +7,9 @@ load.packages('forecast,quantmod,toolbox')
 
 # LOAD DATA USING CURRENT QUOTES LOGIC
 # ONLY SUPPORTS ONE STOCK CURRENTLY
-tickers = toupper(spl('SPY'))
+tickers = toupper(spl('SPY')) ## <- ENTER STOCK SYMBOL HERE
 data <- new.env()
-data = getSymbols(tickers, src = 'yahoo', from = '1980-01-01', env = data, auto.assign = T)
+data = getSymbols(tickers, src = 'yahoo', from = '1980-01-01', env = data, auto.assign = TRUE)
 for(i in ls(data)) data[[i]] = adjustOHLC(data[[i]], use.Adjusted=T)
 quotes = getQuote(tickers)
 for(i in ls(data))
@@ -25,10 +25,11 @@ dates = data$dates
 n.hist=45; n.fore=15
 
 # FIND MATCHES
-fm = find.matches(adj.close,n.hist,n.fore,model="linear", use.cd=FALSE)
+fm = find.matches(adj.close,n.hist,n.fore,model="ves", use.cd=FALSE)
 fit = lm( Y~. , data=fm$rmodel ) #http://bit.ly/WCiGpw
 summary(fit)
-mean(1-abs((fm$rmodel$Y-fit$fitted.values)/fm$rmodel$Y))
+acc(fm$rmodel$Y,fit$fitted.values)
+max(fm$matchcd)
 
 # PLOT MATCHES
 n.match = NROW(fm$matchindx)
