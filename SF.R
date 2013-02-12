@@ -7,7 +7,7 @@ load.packages('forecast,quantmod,toolbox')
 
 # LOAD DATA USING CURRENT QUOTES LOGIC
 # ONLY SUPPORTS ONE STOCK CURRENTLY
-tickers = toupper(spl('SPY')) 
+tickers = toupper(spl('SPY'))
 data <- new.env()
 data = getSymbols(tickers, src = 'yahoo', from = '1980-01-01', env = data, auto.assign = T)
 for(i in ls(data)) data[[i]] = adjustOHLC(data[[i]], use.Adjusted=T)
@@ -31,17 +31,14 @@ summary(fit)
 mean(1-abs((fm$rmodel$Y-fit$fitted.values)/fm$rmodel$Y))
 
 # PLOT MATCHES
-# n.match = NROW(fm$matchindx)
-# max.index = fm$matchindx
-# d.matches = index(data)[1:NROW(data)]
-# plota(data, type='l', col='gray', main=tickers)
-# plota.lines(last(data,n.hist), col='blue')
-# for(i in 1:n.match) {
-#   plota.lines(data[(max.index[i]-n.hist+1):max.index[i]], col='red')
-# }
-# text(index(data)[max.index - n.hist], adj.close[max.index - n.hist], 1:n.match, 
-#      adj=c(1,-1), col='black',xpd=TRUE)
-# plota.legend('Pattern,Matches','blue,red')
+n.match = NROW(fm$matchindx)
+max.index = fm$matchindx
+d.matches = index(dates)[1:NROW(dates)]
+plota(adj.close, type='l', col='gray', main=tickers)
+plota.lines(last(adj.close,n.hist), col='blue')
+for(i in 1:n.match) {
+  plota.lines(adj.close[(max.index[i]-n.hist+1):max.index[i]], col='red')
+}
 
 # BUILD FORECAST
 newdf = fm$fmodel
