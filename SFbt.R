@@ -31,60 +31,58 @@ adj.close = data$prices
 dates = data$dates
 n.hist=35; n.fore=15
 
+# Back testing...
+bt.adj.close = adj.close[1:(NROW(adj.close)-n.fore)]
+bt.dates = data$dates[1:(NROW(adj.close)-n.fore)]
+
 # FIND MATCHES
-fm = find.matches(adj.close,n.hist,n.fore,model="ves", use.cd=TRUE)
+fm = find.matches(bt.adj.close,n.hist,n.fore,model="ves", use.cd=TRUE)
 fit = lm( Y~. , data=fm$rmodel ) #http://bit.ly/WCiGpw
 summary(fit)
+
 dwtest(fit)
 
 # PLOT MATCHES
 n.match = NROW(fm$matchindx)
 max.index = fm$matchindx
-d.matches = index(dates)[1:NROW(dates)]
-plota(adj.close, type='l', col='gray', main=tickers)
-plota.lines(last(adj.close,n.hist), col='blue')
+d.matches = index(bt.dates)[1:NROW(bt.dates)]
+plota(bt.adj.close, type='l', col='gray', main=tickers)
+plota.lines(last(bt.adj.close,n.hist), col='blue')
 for(i in 1:n.match) {
-  plota.lines(adj.close[(max.index[i]-n.hist+1):max.index[i]], col='red')
+  plota.lines(bt.adj.close[(max.index[i]-n.hist+1):max.index[i]], col='red')
 }
 
 # BUILD FORECAST
 newdf = fm$fmodel
 forecast = forecast.lm(fit, newdata=newdf)
 forecast = forecast$mean
-y = as.xts(last(adj.close,180),           
-           index(dates)[(NROW(dates)-(n.hist-1)):NROW(dates)])
-z = extendForecast(dates, round(forecast,2))
-frcst = rbind(y,z); colnames(frcst) = "Adj.Close"
+frcst = extendForecast(bt.dates, round(forecast,2))
+colnames(frcst) = "FORECAST"
 
-# QUICK TECHNICAL REVIEW
+# What really happened...
+hist.adj.close = adj.close[(NROW(adj.close)-(n.fore-1)):NROW(adj.close)]
+colnames(hist.adj.close) = "HIST"
+
+# Quick comparison
 thm = chart_theme()
-thm$col$line.col = 'blue'
-chart_Series(frcst, theme=thm,name=tickers)
-add_Series(last(frcst,(n.fore+1)),on=1)
-add_SMA(n=50, col = "gray")
-add_RSI(n=14)
-add_BBands()
+thm$col$line.col = 'gray'
+chart_Series(last(frcst,(n.fore+1)), theme=thm,name=tickers)
+add_Series(hist.adj.close,on=1)
+# GRAY - FORECAST; RED - HISTORICAL
 
-# Market Price
-mark = round(last(adj.close)); colnames(mark) = "Adj.Close"
-mark$Buy.Sell = 0
-
-# Future Prices
-future = tail(frcst, n.fore)
-future$Buy.Sell = buy.sell(future$Adj.Close)$Buy.Sell
-future = rbind(mark, future)
+# Report
+out = cbind(frcst, hist.adj.close); real.acc = acc(out$FORECAST, out$HIST) # Real Accuracy
+profit = sum(buy.sell(frcst)$Buy.Sell*(-hist.adj.close));
 
 # Model specs
-profit = sum(buy.sell(future$Adj.Close)$Buy.Sell*(-future$Adj.Close));
 model.acc = acc(fm$rmodel$Y,fit$fitted.values) # Model Accuracy
 max.cd = max(fm$matchcd) # CD
 ur2 = unadj.rsquared(fit)$unadj.rsquared
 
-report = list(future, profit, model.acc)
-names(report)[1] = "Forecast"
-names(report)[2] = "Profit"
+report = list(profit, real.acc, model.acc)
+names(report)[1] = "Real.Profit"
+names(report)[2] = "Real.acc"
 names(report)[3] = "Model.acc"
 
 report
-
 ##########################################################################
