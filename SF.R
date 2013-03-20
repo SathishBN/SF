@@ -1,5 +1,3 @@
-##########################################################################
-
 # LOAD PACKAGES
 # install_github("toolbox", "drewgriffith15")
 require(toolbox)
@@ -66,7 +64,7 @@ add_RSI(n=14)
 add_BBands()
 
 # Market Price
-mark = round(last(adj.close)); colnames(mark) = "Adj.Close"
+mark = round(last(adj.close),2); colnames(mark) = "Adj.Close"
 mark$Buy.Sell = 0
 
 # Future Prices
