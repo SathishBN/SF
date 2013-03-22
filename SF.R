@@ -1,7 +1,7 @@
 # LOAD PACKAGES
 # install_github("toolbox", "drewgriffith15")
 require(toolbox)
-load.packages('forecast,quantmod,toolbox,svDialogs')
+load.packages('forecast,quantmod,toolbox,svDialogs,lmtest')
 
 # INPUT BOX
 sym <- dlgInput("Enter Symbol: ")$res
@@ -29,13 +29,53 @@ adj.close = data$prices
 dates = data$dates
 n.hist=35; n.fore=15
 
+# BEGIN BACK TESTING --->
+
+bt.adj.close = adj.close[1:(NROW(adj.close)-n.fore)]
+bt.dates = data$dates[1:(NROW(adj.close)-n.fore)]
+
+bt.fm = find.matches(bt.adj.close,n.hist,n.fore,model="ves", use.cd=TRUE)
+bt.fit = lm( Y~. , data=bt.fm$rmodel ) #http://bit.ly/WCiGpw
+# summary(fit)
+dwtest(bt.fit)
+
+# Building forecast model
+bt.newdf = bt.fm$fmodel
+bt.forecast = forecast.lm(bt.fit, newdata=bt.newdf)
+bt.forecast = bt.forecast$mean
+bt.frcst = extendForecast(bt.dates, round(bt.forecast,2))
+colnames(bt.frcst) = "FORECAST"
+
+# What really happened...
+hist.adj.close = adj.close[(NROW(adj.close)-(n.fore-1)):NROW(adj.close)]
+colnames(hist.adj.close) = "HIST"
+
+# Quick comparison
+thm = chart_theme()
+thm$col$line.col = 'gray'
+chart_Series(last(bt.frcst,(n.fore+1)), theme=thm,name=tickers)
+add_Series(hist.adj.close,on=1)
+# GRAY - FORECAST; RED - HISTORICAL
+
+# Model specs
+bt.profit = sum(buy.sell(bt.frcst)$Buy.Sell*(-hist.adj.close))
+bt.out = cbind(bt.frcst, hist.adj.close, buy.sell(bt.frcst)$Buy.Sell)
+names(bt.out)[3] = "Buy.Sell"
+bt.model.acc = acc(bt.out$FORECAST, bt.out$HIST) # Real Accuracy
+bt.max.cd = max(bt.fm$matchcd) # CD
+bt.ur2 = unadj.rsquared(bt.fit)$unadj.rsquared
+
+# <--- END BACK TESTING
+
+# BEGIN FORECAST MODEL --->
+
 # FIND MATCHES
 fm = find.matches(adj.close,n.hist,n.fore,model="ves", use.cd=TRUE)
 fit = lm( Y~. , data=fm$rmodel ) #http://bit.ly/WCiGpw
-summary(fit)
+# summary(fit)
 dwtest(fit)
 
-# PLOT MATCHES
+# Plot matches
 n.match = NROW(fm$matchindx)
 max.index = fm$matchindx
 d.matches = index(dates)[1:NROW(dates)]
@@ -45,7 +85,7 @@ for(i in 1:n.match) {
   plota.lines(adj.close[(max.index[i]-n.hist+1):max.index[i]], col='red')
 }
 
-# BUILD FORECAST
+# Building forecast model
 newdf = fm$fmodel
 forecast = forecast.lm(fit, newdata=newdf)
 forecast = forecast$mean
@@ -54,7 +94,7 @@ y = as.xts(last(adj.close,180),
 z = extendForecast(dates, round(forecast,2))
 frcst = rbind(y,z); colnames(frcst) = "Adj.Close"
 
-# QUICK TECHNICAL REVIEW
+# Quick technical analysis
 thm = chart_theme()
 thm$col$line.col = 'blue'
 chart_Series(frcst, theme=thm,name=tickers)
@@ -78,11 +118,22 @@ model.acc = acc(fm$rmodel$Y,fit$fitted.values) # Model Accuracy
 max.cd = max(fm$matchcd) # CD
 ur2 = unadj.rsquared(fit)$unadj.rsquared
 
-report = list(future, profit, model.acc)
-names(report)[1] = "Forecast"
-names(report)[2] = "Profit"
-names(report)[3] = "Model.acc"
+# <--- END FORECAST MODEL
 
-report
+# OUTPUT --->
+
+forecast.report = list(future, profit, model.acc)
+names(forecast.report)[1] = "Forecast"
+names(forecast.report)[2] = "Profit"
+names(forecast.report)[3] = "Model.acc"
+
+bt.report = list(bt.out, bt.profit, bt.model.acc)
+names(bt.report)[1] = "Back.Tested.Forecast"
+names(bt.report)[2] = "Back.Tested.Profit"
+names(bt.report)[3] = "Back.Tested.Model.acc"
+
+bt.report; forecast.report
+
+# <--- OUTPUT
 
 ##########################################################################
