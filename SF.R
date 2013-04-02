@@ -14,7 +14,7 @@ if (!length(sym)) { # The user clicked the cancel button
 # ONLY SUPPORTS ONE STOCK CURRENTLY
 tickers = toupper(spl(sym))
 data <- new.env()
-data = getSymbols(tickers, src = 'yahoo', from = '1980-01-01', env = data, auto.assign = TRUE)
+getSymbols(tickers, src = 'yahoo', from = '1980-01-01', env = data, auto.assign = T)
 for(i in ls(data)) data[[i]] = adjustOHLC(data[[i]], use.Adjusted=T)
 quotes = getQuote(tickers)
 for(i in ls(data))
@@ -36,7 +36,7 @@ bt.dates = data$dates[1:(NROW(adj.close)-n.fore)]
 
 bt.fm = find.matches(bt.adj.close,n.hist,n.fore,model="ves", use.cd=TRUE)
 bt.fit = lm( Y~. , data=bt.fm$rmodel ) #http://bit.ly/WCiGpw
-# summary(fit)
+# summary(bt.fit)
 dwtest(bt.fit)
 
 # Building forecast model
@@ -72,8 +72,12 @@ bt.ur2 = unadj.rsquared(bt.fit)$unadj.rsquared
 # FIND MATCHES
 fm = find.matches(adj.close,n.hist,n.fore,model="ves", use.cd=TRUE)
 fit = lm( Y~. , data=fm$rmodel ) #http://bit.ly/WCiGpw
-# summary(fit)
+summary(fit)
 dwtest(fit)
+
+# if (dwtest(fit) < 2) {
+# } 
+# else {data[i,1] = ceiling(data[i,1] + (data[i,1] *.5))}
 
 # Plot matches
 n.match = NROW(fm$matchindx)
@@ -113,7 +117,7 @@ future$Buy.Sell = buy.sell(future$Adj.Close)$Buy.Sell
 future = rbind(mark, future)
 
 # Model specs
-profit = sum(buy.sell(future$Adj.Close)$Buy.Sell*(-future$Adj.Close));
+profit = sum(buy.sell(future$Adj.Close)$Buy.Sell*(-future$Adj.Close))
 model.acc = acc(fm$rmodel$Y,fit$fitted.values) # Model Accuracy
 max.cd = max(fm$matchcd) # CD
 ur2 = unadj.rsquared(fit)$unadj.rsquared
