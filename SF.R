@@ -1,7 +1,7 @@
 # LOAD PACKAGES
-# install_github("toolbox", "drewgriffith15")
-require(toolbox)
-load.packages('forecast,quantmod,toolbox,svDialogs,lmtest')
+install_github("griffun", "drewgriffith15")
+require(griffun)
+load.packages('forecast,quantmod,svDialogs,lmtest')
 
 # INPUT BOX
 sym <- dlgInput("Enter Symbol: ")$res
