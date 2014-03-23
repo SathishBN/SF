@@ -127,7 +127,7 @@ fm.ves.cd.fit = lm(Y~. , data=fm.ves.cd$rmodel)
 fm.ces.cd.fit = lm(Y~. , data=fm.ces.cd$rmodel)
 fm.lin.cd.fit = lm(Y~. , data=fm.lin.cd$rmodel)
 
-# dwtest(fit, alt="two.sided")
+# dwtest(fm.lin.cd.fit, alt="two.sided")
 
 # Building forecast models
 fm.ves.fcast = forecast.lm(fm.ves.fit, newdata=fm.ves$fmodel)
@@ -157,7 +157,7 @@ fm.ces.cd.forecast = extendForecast(fm.dates, round(fm.ces.cd.fcast,4))
 fm.ces.cd.forecast = exp(fm.ces.cd.forecast[,1]) # converting from log to exp
 colnames(fm.ces.cd.forecast) = "fm.ces.cd.FORECAST"
 
-fm.lin.cd.fcast = forecast.lm(fm.lin.cd.fit, newdata=fm.lin$fmodel)
+fm.lin.cd.fcast = forecast.lm(fm.lin.cd.fit, newdata=fm.lin.cd$fmodel)
 fm.lin.cd.fcast = fm.lin.cd.fcast$mean
 fm.lin.cd.forecast = extendForecast(fm.dates, round(fm.lin.cd.fcast,4))
 colnames(fm.lin.cd.forecast) = "fm.lin.cd.FORECAST"
@@ -169,7 +169,7 @@ d.matches = index(fm.dates)[1:NROW(fm.dates)]
 plota(adj.close, type='l', col='gray', main=tickers)
 plota.lines(last(adj.close,n.hist), col='blue')
 for(i in 1:n.match) {
-  plota.lines(adj.close[(max.index[i]-n.hist+1):max.index[i]], col='red')
+  plota.lines(adj.close[max.index[i]:(max.index[i]+n.hist)], col='red')
 }
 
 # Putting it all together
@@ -184,9 +184,8 @@ thm = chart_theme()
 thm$col$line.col = 'blue'
 chart_Series(fm.ag.forecast, theme=thm,name=tickers)
 add_Series(last(fm.ag.forecast,(n.fore+1)),on=1)
-add_SMA(n=100, col = "gray")
+add_SMA(n=20, col = "gray")
 add_RSI(n=14)
-add_BBands()
 
 # Market Price
 mark = round(last(adj.close),2); colnames(mark) = "Adj.Close"
@@ -200,7 +199,6 @@ future = rbind(mark, future)
 # Model specs
 profit = sum(buy.sell(future$Adj.Close)$Buy.Sell*(-future$Adj.Close))
 model.acc = acc(fm.lin$rmodel$Y,fm.lin.fit$fitted.values) # Model Accuracy
-max.cd = max(fm.lin$matchcd) # CD
 ur2 = unadj.rsquared(fm.lin.fit)$unadj.rsquared
 
 # <--- END FORECAST MODEL
