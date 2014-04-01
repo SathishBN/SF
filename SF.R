@@ -4,7 +4,7 @@ require(griffun)
 load.packages('forecast,quantmod,svDialogs,lmtest,TTR')
 
 ## INPUT BOX
-sym <- dlgInput("Enter Symbol: ")$res
+sym <- dlgInput("Enter Symbol: ", default="SPY")$res
 if (!length(sym)) { # The user clicked the cancel button
   cat("OK, if you'd rather not, that is fine too...\n")
 } else {
