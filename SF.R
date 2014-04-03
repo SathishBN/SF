@@ -27,7 +27,7 @@ summary(data$prices)
 
 adj.close = data$prices 
 fm.dates = data$dates
-n.hist=35; n.fore=20
+n.hist=90; n.fore=45
 
 ## BEGIN BACK TESTING --->
 
@@ -43,6 +43,34 @@ bt.ves.cd = find.matches(bt.adj.close,n.hist,n.fore,model="ves", use.cd=TRUE)
 bt.ces.cd = find.matches(bt.adj.close,n.hist,n.fore,model="ces", use.cd=TRUE)
 bt.lin.cd = find.matches(bt.adj.close,n.hist,n.fore,model="linear", use.cd=TRUE)
 
+## Aux model with RSI and BollingerBand flags
+rsi = RSI(data$prices)
+rsi.ob = iif(rsi > 70,1,0)
+rsi.os = iif(rsi < 30,-1,0)
+rsi.sm = rsi.ob+rsi.os
+rsi.rmod = data.frame(rsi.sm[bt.ves$matchindx[1]:(bt.ves$matchindx[1]+(n.hist-1))])
+rsi.fmod = data.frame(rsi.sm[(bt.ves$matchindx[1]+n.hist):(bt.ves$matchindx[1]+(n.hist+n.fore)-1)])
+colnames(rsi.rmod) = "X"; colnames(rsi.fmod) = "X"
+rsi.rmod = rsi.rmod$X; rsi.fmod = rsi.fmod$X
+
+bb = BBands(data$prices)
+bb.dn = iif(data$prices > bb$up,1,0)
+bb.up = iif(data$prices < bb$dn,-1,0)
+bb.sm = bb.dn+bb.up
+bb.rmod = data.frame(bb.sm[bt.ves$matchindx[1]:(bt.ves$matchindx[1]+(n.hist-1))])
+bb.fmod = data.frame(bb.sm[(bt.ves$matchindx[1]+n.hist):(bt.ves$matchindx[1]+(n.hist+n.fore)-1)])
+colnames(bb.rmod) = "X"; colnames(bb.fmod) = "X";
+bb.rmod = bb.rmod$X; bb.fmod = bb.fmod$X
+
+## Prepping for additional stats for linear regression
+bt.ves.aux = c()
+bt.ves.aux$rmodel = cbind(bt.ves$rmodel,rsi.rmod,bb.rmod)
+names(bt.ves.aux$rmodel)[ncol(bt.ves.aux$rmodel)] = "X99"
+names(bt.ves.aux$rmodel)[ncol(bt.ves.aux$rmodel)-1] = "X98"
+bt.ves.aux$fmodel = cbind(bt.ves$fmodel,rsi.fmod,bb.fmod)
+names(bt.ves.aux$fmodel)[ncol(bt.ves.aux$fmodel)] = "X99"
+names(bt.ves.aux$fmodel)[ncol(bt.ves.aux$fmodel)-1] = "X98"
+
 ## Calculate regression models
 bt.ves.fit = lm(Y~. , data=bt.ves$rmodel)
 bt.ces.fit = lm(Y~. , data=bt.ces$rmodel)
@@ -51,6 +79,7 @@ bt.lin.fit = lm(Y~. , data=bt.lin$rmodel)
 bt.ves.cd.fit = lm(Y~. , data=bt.ves.cd$rmodel)
 bt.ces.cd.fit = lm(Y~. , data=bt.ces.cd$rmodel)
 bt.lin.cd.fit = lm(Y~. , data=bt.lin.cd$rmodel)
+bt.ves.aux.fit = lm(Y~. , data=bt.ves.aux$rmodel)
 
 ## Building forecast models
 bt.ves.fcast = forecast.lm(bt.ves.fit, newdata=bt.ves$fmodel)
@@ -85,7 +114,13 @@ bt.lin.cd.fcast = bt.lin.cd.fcast$mean
 bt.lin.cd.forecast = extendForecast(bt.dates, round(bt.lin.cd.fcast,4))
 colnames(bt.lin.cd.forecast) = "bt.lin.cd.FORECAST"
 
-bt.ag.forecast = extendForecast(bt.dates,rowMeans(cbind(bt.ves.forecast,bt.ces.forecast,bt.lin.forecast,bt.ves.cd.forecast,bt.ces.cd.forecast,bt.lin.cd.forecast)))
+bt.ves.aux.fcast = forecast.lm(bt.ves.aux.fit, newdata=bt.ves.aux$fmodel)
+bt.ves.aux.fcast = bt.ves.aux.fcast$mean
+bt.ves.aux.forecast = extendForecast(bt.dates, round(bt.ves.aux.fcast,4))
+colnames(bt.ves.aux.forecast) = "bt.ves.aux.FORECAST"
+
+## Combine forecast models
+bt.ag.forecast = extendForecast(bt.dates,rowMeans(cbind(bt.ves.aux.forecast,bt.ves.forecast,bt.ces.forecast,bt.lin.forecast,bt.ves.cd.forecast,bt.ces.cd.forecast,bt.lin.cd.forecast)))
 colnames(bt.ag.forecast) = "FORECAST"
 
 ## What really happened...
@@ -103,7 +138,8 @@ add_Series(hist.adj.close,on=1)
 bt.profit = sum(buy.sell(bt.ag.forecast)$Buy.Sell*(-hist.adj.close))
 bt.out = cbind(hist.adj.close, bt.ag.forecast, buy.sell(bt.ag.forecast)$Buy.Sell)
 names(bt.out)[3] = "Buy.Sell"
-bt.model.acc = acc(bt.out$FORECAST, bt.out$HIST) ## Real Accuracy
+bt.model.acc = acc(bt.out$FORECAST, bt.out$HIST) ## Overall Accuracy
+bt.model.cor = cor(bt.out$FORECAST,bt.out$HIST) ## Correlation
 
 ## <--- END BACK TESTING
 
@@ -118,6 +154,27 @@ fm.ves.cd = find.matches(adj.close,n.hist,n.fore,model="ves", use.cd=TRUE)
 fm.ces.cd = find.matches(adj.close,n.hist,n.fore,model="ces", use.cd=TRUE)
 fm.lin.cd = find.matches(adj.close,n.hist,n.fore,model="linear", use.cd=TRUE)
 
+## Aux model with RSI and BollingerBand flags
+## RSI already calculated in backtest 
+rsi.rmod = data.frame(rsi.sm[fm.ves$matchindx[1]:(fm.ves$matchindx[1]+(n.hist-1))])
+rsi.fmod = data.frame(rsi.sm[(fm.ves$matchindx[1]+n.hist):(fm.ves$matchindx[1]+(n.hist+n.fore)-1)])
+colnames(rsi.rmod) = "X"; colnames(rsi.fmod) = "X"
+rsi.rmod = rsi.rmod$X; rsi.fmod = rsi.fmod$X
+## BB already calculated in backtest
+bb.rmod = data.frame(bb.sm[fm.ves$matchindx[1]:(fm.ves$matchindx[1]+(n.hist-1))])
+bb.fmod = data.frame(bb.sm[(fm.ves$matchindx[1]+n.hist):(fm.ves$matchindx[1]+(n.hist+n.fore)-1)])
+colnames(bb.rmod) = "X"; colnames(bb.fmod) = "X";
+bb.rmod = bb.rmod$X; bb.fmod = bb.fmod$X
+
+## Prepping for additional stats for linear regression
+fm.ves.aux = c()
+fm.ves.aux$rmodel = cbind(fm.ves$rmodel,rsi.rmod,bb.rmod)
+names(fm.ves.aux$rmodel)[ncol(fm.ves.aux$rmodel)] = "X99"
+names(fm.ves.aux$rmodel)[ncol(fm.ves.aux$rmodel)-1] = "X98"
+fm.ves.aux$fmodel = cbind(fm.ves$fmodel,rsi.fmod,bb.fmod)
+names(fm.ves.aux$fmodel)[ncol(fm.ves.aux$fmodel)] = "X99"
+names(fm.ves.aux$fmodel)[ncol(fm.ves.aux$fmodel)-1] = "X98"
+
 ## Calculate regression models
 fm.ves.fit = lm(Y~. , data=fm.ves$rmodel)
 fm.ces.fit = lm(Y~. , data=fm.ces$rmodel)
@@ -126,6 +183,7 @@ fm.lin.fit = lm(Y~. , data=fm.lin$rmodel)
 fm.ves.cd.fit = lm(Y~. , data=fm.ves.cd$rmodel)
 fm.ces.cd.fit = lm(Y~. , data=fm.ces.cd$rmodel)
 fm.lin.cd.fit = lm(Y~. , data=fm.lin.cd$rmodel)
+fm.ves.aux.fit = lm(Y~. , data=fm.ves.aux$rmodel)
 
 # dwtest(fm.lin.cd.fit, alt="two.sided")
 
@@ -162,6 +220,11 @@ fm.lin.cd.fcast = fm.lin.cd.fcast$mean
 fm.lin.cd.forecast = extendForecast(fm.dates, round(fm.lin.cd.fcast,4))
 colnames(fm.lin.cd.forecast) = "fm.lin.cd.FORECAST"
 
+fm.ves.aux.fcast = forecast.lm(fm.ves.aux.fit, newdata=fm.ves.aux$fmodel)
+fm.ves.aux.fcast = fm.ves.aux.fcast$mean
+fm.ves.aux.forecast = extendForecast(fm.dates, round(fm.ves.aux.fcast,4))
+colnames(fm.ves.aux.forecast) = "fm.ves.aux.FORECAST"
+
 ## Plot matches
 n.match = NROW(fm.lin$matchindx)
 max.index = fm.lin$matchindx
@@ -175,7 +238,7 @@ for(i in 1:n.match) {
 ## Putting it all together
 y = as.xts(last(adj.close,180),
            index(fm.dates)[(NROW(fm.dates)-(n.hist-1)):NROW(fm.dates)])
-z = extendForecast(fm.dates,rowMeans(cbind(fm.ves.forecast,fm.ces.forecast,fm.lin.forecast,fm.ves.cd.forecast,fm.ces.cd.forecast,fm.lin.cd.forecast)))
+z = extendForecast(fm.dates,rowMeans(cbind(fm.ves.aux.fcast,fm.ves.forecast,fm.ces.forecast,fm.lin.forecast,fm.ves.cd.forecast,fm.ces.cd.forecast,fm.lin.cd.forecast)))
 fm.ag.forecast = rbind(y,z)
 colnames(fm.ag.forecast) = "Adj.Close"
 
@@ -189,12 +252,12 @@ add_BBands()
 
 ## Market Price
 mark = round(last(adj.close),2); colnames(mark) = "Adj.Close"
-mark$Buy.Sell = 0
+# mark$Buy.Sell = 0
 
 ## Future Prices
 future = tail(fm.ag.forecast, n.fore)
-future$Buy.Sell = buy.sell(future$Adj.Close)$Buy.Sell
 future = rbind(mark, future)
+future$Buy.Sell = buy.sell(future$Adj.Close)$Buy.Sell
 
 ## Model specs
 profit = sum(buy.sell(future$Adj.Close)$Buy.Sell*(-future$Adj.Close))
@@ -205,17 +268,18 @@ ur2 = unadj.rsquared(fm.lin.fit)$unadj.rsquared
 
 ## OUTPUT --->
 
-bt.report = list(bt.out, bt.profit, bt.model.acc)
+bt.report = list(bt.out, bt.profit, bt.model.acc,bt.model.cor)
 names(bt.report)[1] = "Back.Tested.Forecast"
 names(bt.report)[2] = "Back.Tested.Profit"
 names(bt.report)[3] = "Back.Tested.Model.acc"
+names(bt.report)[4] = "Back.Tested.Model.cor"
 
 forecast.report = list(future, profit, model.acc)
 names(forecast.report)[1] = "Forecast"
 names(forecast.report)[2] = "Profit"
 names(forecast.report)[3] = "Model.acc"
 
-bt.report; forecast.report
+forecast.report; bt.report
 
 ## <--- OUTPUT
 
