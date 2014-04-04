@@ -268,18 +268,14 @@ ur2 = unadj.rsquared(fm.lin.fit)$unadj.rsquared
 
 ## OUTPUT --->
 
-bt.report = list(bt.out, bt.profit, bt.model.acc,bt.model.cor)
-names(bt.report)[1] = "Back.Tested.Forecast"
-names(bt.report)[2] = "Back.Tested.Profit"
-names(bt.report)[3] = "Back.Tested.Model.acc"
-names(bt.report)[4] = "Back.Tested.Model.cor"
-
-forecast.report = list(future, profit, model.acc)
-names(forecast.report)[1] = "Forecast"
-names(forecast.report)[2] = "Profit"
-names(forecast.report)[3] = "Model.acc"
-
-forecast.report; bt.report
+report = list(bt.out, bt.profit, bt.model.acc, bt.model.cor, future, profit)
+names(report)[1] = "Back.Tested.Forecast"
+names(report)[2] = "Back.Tested.Profit"
+names(report)[3] = "Back.Tested.Model.acc"
+names(report)[4] = "Back.Tested.Model.cor"
+names(report)[5] = "Forecast"
+names(report)[6] = "Est.Profit"
+report
 
 ## <--- OUTPUT
 
