@@ -14,7 +14,7 @@ if (!length(sym)) { # The user clicked the cancel button
 ## ONLY SUPPORTS ONE STOCK CURRENTLY
 tickers = toupper(spl(sym))
 data <- new.env()
-getSymbols(tickers, src = 'yahoo', from = '1980-01-01', env = data, auto.assign = T)
+getSymbols(tickers, src = 'yahoo', from = '2000-01-01', env = data, auto.assign = T)
 for(i in ls(data)) data[[i]] = adjustOHLC(data[[i]], use.Adjusted=T)
 quotes = getQuote(tickers)
 for(i in ls(data))
@@ -25,103 +25,59 @@ for(i in ls(data))
 bt.prep(data)
 summary(data$prices)
 
-adj.close = data$prices 
+adj.close = data$prices
 fm.dates = data$dates
-n.hist=90; n.fore=45
+rsi.values = RSI(adj.close)
+n.hist=35; n.fore=15
 
 ## BEGIN BACK TESTING --->
 
 bt.adj.close = adj.close[1:(NROW(adj.close)-n.fore)]
 bt.dates = data$dates[1:(NROW(adj.close)-n.fore)]
+bt.rsi.values = RSI(bt.adj.close)
 
 ## Find matches to create regression models
-bt.ves = find.matches(bt.adj.close,n.hist,n.fore,model="ves", use.cd=FALSE)
-bt.ces = find.matches(bt.adj.close,n.hist,n.fore,model="ces", use.cd=FALSE)
-bt.lin = find.matches(bt.adj.close,n.hist,n.fore,model="linear", use.cd=FALSE)
+bt.raw = find.matches(bt.adj.close,n.hist,n.fore,n.match=floor(n.hist*.25), model="linear", use.cd=FALSE)
+bt.rsi = find.matches(bt.rsi.values,n.hist,n.fore,n.match=floor(n.hist*.15),model="linear", use.cd=FALSE)
 
-bt.ves.cd = find.matches(bt.adj.close,n.hist,n.fore,model="ves", use.cd=TRUE)
-bt.ces.cd = find.matches(bt.adj.close,n.hist,n.fore,model="ces", use.cd=TRUE)
-bt.lin.cd = find.matches(bt.adj.close,n.hist,n.fore,model="linear", use.cd=TRUE)
+## Adding RSI to model
+bt.n.match = NROW(bt.rsi$matchindx)
+bt.match.index = bt.rsi$matchindx
+bt.d.matches = index(bt.dates)[1:NROW(bt.dates)]
 
-## Aux model with RSI and BollingerBand flags
-rsi = RSI(data$prices)
-rsi.ob = iif(rsi > 70,1,0)
-rsi.os = iif(rsi < 30,-1,0)
-rsi.sm = rsi.ob+rsi.os
-rsi.rmod = data.frame(rsi.sm[bt.ves$matchindx[1]:(bt.ves$matchindx[1]+(n.hist-1))])
-rsi.fmod = data.frame(rsi.sm[(bt.ves$matchindx[1]+n.hist):(bt.ves$matchindx[1]+(n.hist+n.fore)-1)])
-colnames(rsi.rmod) = "X"; colnames(rsi.fmod) = "X"
-rsi.rmod = rsi.rmod$X; rsi.fmod = rsi.fmod$X
+# RSI regression model
+bt.rsi.rmod = matrix(NA, nr=(n.hist), nc=(bt.n.match))
+for(i in 1:bt.n.match) {
+  bt.rsi.rmod[,i] = bt.adj.close[bt.match.index[i]:(bt.match.index[i]+(n.hist-1))]
+}
+# Rename columns
+bt.rsi.rmod = data.frame(bt.rsi.rmod)
+names(bt.rsi.rmod) = gsub("X", "R", names(bt.rsi.rmod))
 
-bb = BBands(data$prices)
-bb.dn = iif(data$prices > bb$up,1,0)
-bb.up = iif(data$prices < bb$dn,-1,0)
-bb.sm = bb.dn+bb.up
-bb.rmod = data.frame(bb.sm[bt.ves$matchindx[1]:(bt.ves$matchindx[1]+(n.hist-1))])
-bb.fmod = data.frame(bb.sm[(bt.ves$matchindx[1]+n.hist):(bt.ves$matchindx[1]+(n.hist+n.fore)-1)])
-colnames(bb.rmod) = "X"; colnames(bb.fmod) = "X";
-bb.rmod = bb.rmod$X; bb.fmod = bb.fmod$X
-
-## Prepping for additional stats for linear regression
-bt.ves.aux = c()
-bt.ves.aux$rmodel = cbind(bt.ves$rmodel,rsi.rmod,bb.rmod)
-names(bt.ves.aux$rmodel)[ncol(bt.ves.aux$rmodel)] = "X99"
-names(bt.ves.aux$rmodel)[ncol(bt.ves.aux$rmodel)-1] = "X98"
-bt.ves.aux$fmodel = cbind(bt.ves$fmodel,rsi.fmod,bb.fmod)
-names(bt.ves.aux$fmodel)[ncol(bt.ves.aux$fmodel)] = "X99"
-names(bt.ves.aux$fmodel)[ncol(bt.ves.aux$fmodel)-1] = "X98"
+# Combine real values with RSI
+bt.reg.model = cbind(bt.raw$rmodel,bt.rsi.rmod)
 
 ## Calculate regression models
-bt.ves.fit = lm(Y~. , data=bt.ves$rmodel)
-bt.ces.fit = lm(Y~. , data=bt.ces$rmodel)
-bt.lin.fit = lm(Y~. , data=bt.lin$rmodel)
-
-bt.ves.cd.fit = lm(Y~. , data=bt.ves.cd$rmodel)
-bt.ces.cd.fit = lm(Y~. , data=bt.ces.cd$rmodel)
-bt.lin.cd.fit = lm(Y~. , data=bt.lin.cd$rmodel)
-bt.ves.aux.fit = lm(Y~. , data=bt.ves.aux$rmodel)
+bt.reg.fit = lm(Y~. , data=bt.reg.model)
 
 ## Building forecast models
-bt.ves.fcast = forecast.lm(bt.ves.fit, newdata=bt.ves$fmodel)
-bt.ves.fcast = bt.ves.fcast$mean
-bt.ves.forecast = extendForecast(bt.dates, round(bt.ves.fcast,4))
-colnames(bt.ves.forecast) = "bt.ves.FORECAST"
 
-bt.ces.fcast = forecast.lm(bt.ces.fit, newdata=bt.ces$fmodel)
-bt.ces.fcast = bt.ces.fcast$mean
-bt.ces.forecast = extendForecast(bt.dates, round(bt.ces.fcast,4))
-bt.ces.forecast = exp(bt.ces.forecast[,1]) ## converting from log to exp
-colnames(bt.ces.forecast) = "bt.ces.FORECAST"
+# RSI forecast model
+bt.rsi.fmod = matrix(NA, nr=(n.fore), nc=(bt.n.match))
+for(i in 1:bt.n.match) {
+  bt.rsi.fmod[,i] = bt.adj.close[(bt.match.index[i]+n.hist):(bt.match.index[i]+(n.hist+n.fore)-1)]
+}
+# Rename columns
+bt.rsi.fmod = data.frame(bt.rsi.fmod)
+names(bt.rsi.fmod) = gsub("X", "R", names(bt.rsi.fmod))
 
-bt.lin.fcast = forecast.lm(bt.lin.fit, newdata=bt.lin$fmodel)
-bt.lin.fcast = bt.lin.fcast$mean
-bt.lin.forecast = extendForecast(bt.dates, round(bt.lin.fcast,4))
-colnames(bt.lin.forecast) = "bt.lin.FORECAST"
+# Combine real values with RSI
+bt.fcast.model = cbind(bt.raw$fmodel,bt.rsi.fmod)
 
-bt.ves.cd.fcast = forecast.lm(bt.ves.cd.fit, newdata=bt.ves.cd$fmodel)
-bt.ves.cd.fcast = bt.ves.cd.fcast$mean
-bt.ves.cd.forecast = extendForecast(bt.dates, round(bt.ves.cd.fcast,4))
-colnames(bt.ves.cd.forecast) = "bt.ves.cd.FORECAST"
-
-bt.ces.cd.fcast = forecast.lm(bt.ces.cd.fit, newdata=bt.ces.cd$fmodel)
-bt.ces.cd.fcast = bt.ces.cd.fcast$mean
-bt.ces.cd.forecast = extendForecast(bt.dates, round(bt.ces.cd.fcast,4))
-bt.ces.cd.forecast = exp(bt.ces.cd.forecast[,1]) ## converting from log to exp
-colnames(bt.ces.cd.forecast) = "bt.ces.cd.FORECAST"
-
-bt.lin.cd.fcast = forecast.lm(bt.lin.cd.fit, newdata=bt.lin.cd$fmodel)
-bt.lin.cd.fcast = bt.lin.cd.fcast$mean
-bt.lin.cd.forecast = extendForecast(bt.dates, round(bt.lin.cd.fcast,4))
-colnames(bt.lin.cd.forecast) = "bt.lin.cd.FORECAST"
-
-bt.ves.aux.fcast = forecast.lm(bt.ves.aux.fit, newdata=bt.ves.aux$fmodel)
-bt.ves.aux.fcast = bt.ves.aux.fcast$mean
-bt.ves.aux.forecast = extendForecast(bt.dates, round(bt.ves.aux.fcast,4))
-colnames(bt.ves.aux.forecast) = "bt.ves.aux.FORECAST"
-
-## Combine forecast models
-bt.ag.forecast = extendForecast(bt.dates,rowMeans(cbind(bt.ves.aux.forecast,bt.ves.forecast,bt.ces.forecast,bt.lin.forecast,bt.ves.cd.forecast,bt.ces.cd.forecast,bt.lin.cd.forecast)))
-colnames(bt.ag.forecast) = "FORECAST"
+bt.fcast = forecast.lm(bt.reg.fit, newdata=bt.fcast.model)
+bt.fcast = bt.fcast$mean
+bt.forecast = extendForecast(bt.dates, round(bt.fcast,4))
+colnames(bt.forecast) = "FORECAST"
 
 ## What really happened...
 hist.adj.close = adj.close[(NROW(adj.close)-(n.fore-1)):NROW(adj.close)]
@@ -130,14 +86,15 @@ colnames(hist.adj.close) = "HISTORY"
 ## Quick comparison
 thm = chart_theme()
 thm$col$line.col = 'gray'
-chart_Series(last(bt.ag.forecast,(n.fore+1)), theme=thm,name=tickers)
+chart_Series(last(bt.forecast,(n.fore+1)), theme=thm,name=tickers)
 add_Series(hist.adj.close,on=1)
 ## GRAY - FORECAST; RED - HISTORICAL
 
 ## Model specs
-bt.profit = sum(buy.sell(bt.ag.forecast)$Buy.Sell*(-hist.adj.close))
-bt.out = cbind(hist.adj.close, bt.ag.forecast, buy.sell(bt.ag.forecast)$Buy.Sell)
+bt.profit = sum(buy.sell(bt.forecast)$Buy.Sell*(-hist.adj.close))
+bt.out = cbind(hist.adj.close, bt.forecast, buy.sell(bt.forecast)$Buy.Sell)
 names(bt.out)[3] = "Buy.Sell"
+bt.model.reg = summary(bt.reg.fit) ## Reg model summary
 bt.model.acc = acc(bt.out$FORECAST, bt.out$HIST) ## Overall Accuracy
 bt.model.cor = cor(bt.out$FORECAST,bt.out$HIST) ## Correlation
 
@@ -146,99 +103,62 @@ bt.model.cor = cor(bt.out$FORECAST,bt.out$HIST) ## Correlation
 ## BEGIN FORECAST MODEL --->
 
 ## Find matches to create regression models
-fm.ves = find.matches(adj.close,n.hist,n.fore,model="ves", use.cd=FALSE)
-fm.ces = find.matches(adj.close,n.hist,n.fore,model="ces", use.cd=FALSE)
-fm.lin = find.matches(adj.close,n.hist,n.fore,model="linear", use.cd=FALSE)
+fm.raw = find.matches(adj.close,n.hist,n.fore,n.match=floor(n.hist*.25), model="linear", use.cd=FALSE)
+fm.rsi = find.matches(rsi.values,n.hist,n.fore,n.match=floor(n.hist*.15),model="linear", use.cd=FALSE)
 
-fm.ves.cd = find.matches(adj.close,n.hist,n.fore,model="ves", use.cd=TRUE)
-fm.ces.cd = find.matches(adj.close,n.hist,n.fore,model="ces", use.cd=TRUE)
-fm.lin.cd = find.matches(adj.close,n.hist,n.fore,model="linear", use.cd=TRUE)
+## Adding RSI to model
+fm.n.match = NROW(fm.rsi$matchindx)
+fm.match.index = fm.rsi$matchindx
+fm.d.matches = index(fm.dates)[1:NROW(fm.dates)]
 
-## Aux model with RSI and BollingerBand flags
-## RSI already calculated in backtest 
-rsi.rmod = data.frame(rsi.sm[fm.ves$matchindx[1]:(fm.ves$matchindx[1]+(n.hist-1))])
-rsi.fmod = data.frame(rsi.sm[(fm.ves$matchindx[1]+n.hist):(fm.ves$matchindx[1]+(n.hist+n.fore)-1)])
-colnames(rsi.rmod) = "X"; colnames(rsi.fmod) = "X"
-rsi.rmod = rsi.rmod$X; rsi.fmod = rsi.fmod$X
-## BB already calculated in backtest
-bb.rmod = data.frame(bb.sm[fm.ves$matchindx[1]:(fm.ves$matchindx[1]+(n.hist-1))])
-bb.fmod = data.frame(bb.sm[(fm.ves$matchindx[1]+n.hist):(fm.ves$matchindx[1]+(n.hist+n.fore)-1)])
-colnames(bb.rmod) = "X"; colnames(bb.fmod) = "X";
-bb.rmod = bb.rmod$X; bb.fmod = bb.fmod$X
+# RSI regression model
+fm.rsi.rmod = matrix(NA, nr=(n.hist), nc=(fm.n.match))
+for(i in 1:fm.n.match) {
+  fm.rsi.rmod[,i] = adj.close[fm.match.index[i]:(fm.match.index[i]+(n.hist-1))]
+}
+# Rename columns
+fm.rsi.rmod = data.frame(fm.rsi.rmod)
+names(fm.rsi.rmod) = gsub("X", "R", names(fm.rsi.rmod))
 
-## Prepping for additional stats for linear regression
-fm.ves.aux = c()
-fm.ves.aux$rmodel = cbind(fm.ves$rmodel,rsi.rmod,bb.rmod)
-names(fm.ves.aux$rmodel)[ncol(fm.ves.aux$rmodel)] = "X99"
-names(fm.ves.aux$rmodel)[ncol(fm.ves.aux$rmodel)-1] = "X98"
-fm.ves.aux$fmodel = cbind(fm.ves$fmodel,rsi.fmod,bb.fmod)
-names(fm.ves.aux$fmodel)[ncol(fm.ves.aux$fmodel)] = "X99"
-names(fm.ves.aux$fmodel)[ncol(fm.ves.aux$fmodel)-1] = "X98"
+# Combine real values with RSI
+fm.reg.model = cbind(fm.raw$rmodel,fm.rsi.rmod)
 
 ## Calculate regression models
-fm.ves.fit = lm(Y~. , data=fm.ves$rmodel)
-fm.ces.fit = lm(Y~. , data=fm.ces$rmodel)
-fm.lin.fit = lm(Y~. , data=fm.lin$rmodel)
-
-fm.ves.cd.fit = lm(Y~. , data=fm.ves.cd$rmodel)
-fm.ces.cd.fit = lm(Y~. , data=fm.ces.cd$rmodel)
-fm.lin.cd.fit = lm(Y~. , data=fm.lin.cd$rmodel)
-fm.ves.aux.fit = lm(Y~. , data=fm.ves.aux$rmodel)
-
-# dwtest(fm.lin.cd.fit, alt="two.sided")
+fm.reg.fit = lm(Y~. , data=fm.reg.model)
 
 ## Building forecast models
-fm.ves.fcast = forecast.lm(fm.ves.fit, newdata=fm.ves$fmodel)
-fm.ves.fcast = fm.ves.fcast$mean
-fm.ves.forecast = extendForecast(fm.dates, round(fm.ves.fcast,4))
-colnames(fm.ves.forecast) = "fm.ves.FORECAST"
 
-fm.ces.fcast = forecast.lm(fm.ces.fit, newdata=fm.ces$fmodel)
-fm.ces.fcast = fm.ces.fcast$mean
-fm.ces.forecast = extendForecast(fm.dates, round(fm.ces.fcast,4))
-fm.ces.forecast = exp(fm.ces.forecast[,1]) ## converting from log to exp
-colnames(fm.ces.forecast) = "fm.ces.FORECAST"
+# RSI forecast model
+fm.rsi.fmod = matrix(NA, nr=(n.fore), nc=(fm.n.match))
+for(i in 1:fm.n.match) {
+  fm.rsi.fmod[,i] = adj.close[(fm.match.index[i]+n.hist):(fm.match.index[i]+(n.hist+n.fore)-1)]
+}
+# Rename columns
+fm.rsi.fmod = data.frame(fm.rsi.fmod)
+names(fm.rsi.fmod) = gsub("X", "R", names(fm.rsi.fmod))
 
-fm.lin.fcast = forecast.lm(fm.lin.fit, newdata=fm.lin$fmodel)
-fm.lin.fcast = fm.lin.fcast$mean
-fm.lin.forecast = extendForecast(fm.dates, round(fm.lin.fcast,4))
-colnames(fm.lin.forecast) = "fm.lin.FORECAST"
+# Combine real values with RSI
+fm.fcast.model = cbind(fm.raw$fmodel,fm.rsi.fmod)
 
-fm.ves.cd.fcast = forecast.lm(fm.ves.cd.fit, newdata=fm.ves.cd$fmodel)
-fm.ves.cd.fcast = fm.ves.cd.fcast$mean
-fm.ves.cd.forecast = extendForecast(fm.dates, round(fm.ves.cd.fcast,4))
-colnames(fm.ves.cd.forecast) = "fm.ves.cd.FORECAST"
-
-fm.ces.cd.fcast = forecast.lm(fm.ces.cd.fit, newdata=fm.ces.cd$fmodel)
-fm.ces.cd.fcast = fm.ces.cd.fcast$mean
-fm.ces.cd.forecast = extendForecast(fm.dates, round(fm.ces.cd.fcast,4))
-fm.ces.cd.forecast = exp(fm.ces.cd.forecast[,1]) ## converting from log to exp
-colnames(fm.ces.cd.forecast) = "fm.ces.cd.FORECAST"
-
-fm.lin.cd.fcast = forecast.lm(fm.lin.cd.fit, newdata=fm.lin.cd$fmodel)
-fm.lin.cd.fcast = fm.lin.cd.fcast$mean
-fm.lin.cd.forecast = extendForecast(fm.dates, round(fm.lin.cd.fcast,4))
-colnames(fm.lin.cd.forecast) = "fm.lin.cd.FORECAST"
-
-fm.ves.aux.fcast = forecast.lm(fm.ves.aux.fit, newdata=fm.ves.aux$fmodel)
-fm.ves.aux.fcast = fm.ves.aux.fcast$mean
-fm.ves.aux.forecast = extendForecast(fm.dates, round(fm.ves.aux.fcast,4))
-colnames(fm.ves.aux.forecast) = "fm.ves.aux.FORECAST"
+fm.fcast = forecast.lm(fm.reg.fit, newdata=fm.fcast.model)
+fm.fcast = fm.fcast$mean
+fm.forecast = extendForecast(fm.dates, round(fm.fcast,4))
+colnames(fm.forecast) = "FORECAST"
 
 ## Plot matches
-n.match = NROW(fm.lin$matchindx)
-max.index = fm.lin$matchindx
+n.match = NROW(fm.raw$matchindx)
+match.index = fm.raw$matchindx
 d.matches = index(fm.dates)[1:NROW(fm.dates)]
 plota(adj.close, type='l', col='gray', main=tickers)
 plota.lines(last(adj.close,n.hist), col='blue')
 for(i in 1:n.match) {
-  plota.lines(adj.close[max.index[i]:(max.index[i]+n.hist)], col='red')
+  plota.lines(adj.close[match.index[i]:(match.index[i]+n.hist)], col='red')
 }
 
 ## Putting it all together
 y = as.xts(last(adj.close,180),
            index(fm.dates)[(NROW(fm.dates)-(n.hist-1)):NROW(fm.dates)])
-z = extendForecast(fm.dates,rowMeans(cbind(fm.ves.aux.fcast,fm.ves.forecast,fm.ces.forecast,fm.lin.forecast,fm.ves.cd.forecast,fm.ces.cd.forecast,fm.lin.cd.forecast)))
+z = extendForecast(fm.dates,fm.forecast)
 fm.ag.forecast = rbind(y,z)
 colnames(fm.ag.forecast) = "Adj.Close"
 
@@ -261,8 +181,8 @@ future$Buy.Sell = buy.sell(future$Adj.Close)$Buy.Sell
 
 ## Model specs
 profit = sum(buy.sell(future$Adj.Close)$Buy.Sell*(-future$Adj.Close))
-model.acc = acc(fm.lin$rmodel$Y,fm.lin.fit$fitted.values) ## Model Accuracy
-ur2 = unadj.rsquared(fm.lin.fit)$unadj.rsquared
+model.acc = acc(fm.raw$rmodel$Y,fm.reg.fit$fitted.values) ## Model Accuracy
+ur2 = unadj.rsquared(fm.reg.fit)$unadj.rsquared
 
 ## <--- END FORECAST MODEL
 
