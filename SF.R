@@ -1,6 +1,13 @@
-## LOAD PACKAGES
-# install_github("griffun", "drewgriffith15")
-require(griffun)
+###############################################################################
+# Load Systematic Investor Toolbox (SIT)
+# http://systematicinvestor.wordpress.com/systematic-investor-toolbox/
+###############################################################################
+setInternet2(TRUE)
+con = gzcon(url('http://www.systematicportfolio.com/sit.gz', 'rb'))
+source(con)
+close(con)
+
+library(griffun)
 load.packages('forecast,quantmod,svDialogs,lmtest,TTR')
 
 ## INPUT BOX
@@ -14,7 +21,7 @@ if (!length(sym)) { # The user clicked the cancel button
 ## ONLY SUPPORTS ONE STOCK CURRENTLY
 tickers = toupper(spl(sym))
 data <- new.env()
-getSymbols(tickers, src = 'yahoo', from = '1980-01-01', env = data, auto.assign = T)
+getSymbols(tickers, src = 'yahoo', from = '1950-01-01', env = data, auto.assign = T)
 for(i in ls(data)) data[[i]] = adjustOHLC(data[[i]], use.Adjusted=T)
 quotes = getQuote(tickers)
 for(i in ls(data))
@@ -25,68 +32,29 @@ for(i in ls(data))
 bt.prep(data)
 summary(data$prices)
 
-adj.close = data$prices 
+adj.close = data$prices
 fm.dates = data$dates
-n.hist=35; n.fore=15
+n.hist=35; n.fore=20
 
 ## BEGIN BACK TESTING --->
 
 bt.adj.close = adj.close[1:(NROW(adj.close)-n.fore)]
 bt.dates = data$dates[1:(NROW(adj.close)-n.fore)]
 
-## Find matches to create regression models
-bt.ves = find.matches(bt.adj.close,n.hist,n.fore,model="ves", use.cd=FALSE)
-bt.ces = find.matches(bt.adj.close,n.hist,n.fore,model="ces", use.cd=FALSE)
-bt.lin = find.matches(bt.adj.close,n.hist,n.fore,model="linear", use.cd=FALSE)
-
+## Find matches in historical data
 bt.ves.cd = find.matches(bt.adj.close,n.hist,n.fore,model="ves", use.cd=TRUE)
-bt.ces.cd = find.matches(bt.adj.close,n.hist,n.fore,model="ces", use.cd=TRUE)
-bt.lin.cd = find.matches(bt.adj.close,n.hist,n.fore,model="linear", use.cd=TRUE)
 
-## Calculate regression models
-bt.ves.fit = lm(Y~. , data=bt.ves$rmodel)
-bt.ces.fit = lm(Y~. , data=bt.ces$rmodel)
-bt.lin.fit = lm(Y~. , data=bt.lin$rmodel)
-
+## Calculate regression model
 bt.ves.cd.fit = lm(Y~. , data=bt.ves.cd$rmodel)
-bt.ces.cd.fit = lm(Y~. , data=bt.ces.cd$rmodel)
-bt.lin.cd.fit = lm(Y~. , data=bt.lin.cd$rmodel)
 
-## Building forecast models
-bt.ves.fcast = forecast.lm(bt.ves.fit, newdata=bt.ves$fmodel)
-bt.ves.fcast = bt.ves.fcast$mean
-bt.ves.forecast = extendForecast(bt.dates, round(bt.ves.fcast,4))
-colnames(bt.ves.forecast) = "bt.ves.FORECAST"
-
-bt.ces.fcast = forecast.lm(bt.ces.fit, newdata=bt.ces$fmodel)
-bt.ces.fcast = bt.ces.fcast$mean
-bt.ces.forecast = extendForecast(bt.dates, round(bt.ces.fcast,4))
-bt.ces.forecast = exp(bt.ces.forecast[,1]) ## converting from log to exp
-colnames(bt.ces.forecast) = "bt.ces.FORECAST"
-
-bt.lin.fcast = forecast.lm(bt.lin.fit, newdata=bt.lin$fmodel)
-bt.lin.fcast = bt.lin.fcast$mean
-bt.lin.forecast = extendForecast(bt.dates, round(bt.lin.fcast,4))
-colnames(bt.lin.forecast) = "bt.lin.FORECAST"
-
+## Building forecast model
 bt.ves.cd.fcast = forecast.lm(bt.ves.cd.fit, newdata=bt.ves.cd$fmodel)
 bt.ves.cd.fcast = bt.ves.cd.fcast$mean
 bt.ves.cd.forecast = extendForecast(bt.dates, round(bt.ves.cd.fcast,4))
 colnames(bt.ves.cd.forecast) = "bt.ves.cd.FORECAST"
 
-bt.ces.cd.fcast = forecast.lm(bt.ces.cd.fit, newdata=bt.ces.cd$fmodel)
-bt.ces.cd.fcast = bt.ces.cd.fcast$mean
-bt.ces.cd.forecast = extendForecast(bt.dates, round(bt.ces.cd.fcast,4))
-bt.ces.cd.forecast = exp(bt.ces.cd.forecast[,1]) ## converting from log to exp
-colnames(bt.ces.cd.forecast) = "bt.ces.cd.FORECAST"
-
-bt.lin.cd.fcast = forecast.lm(bt.lin.cd.fit, newdata=bt.lin.cd$fmodel)
-bt.lin.cd.fcast = bt.lin.cd.fcast$mean
-bt.lin.cd.forecast = extendForecast(bt.dates, round(bt.lin.cd.fcast,4))
-colnames(bt.lin.cd.forecast) = "bt.lin.cd.FORECAST"
-
 ## Combine forecast models
-bt.ag.forecast = extendForecast(bt.dates,rowMeans(cbind(bt.ves.forecast,bt.ces.forecast,bt.lin.forecast,bt.ves.cd.forecast,bt.ces.cd.forecast,bt.lin.cd.forecast)))
+bt.ag.forecast = extendForecast(bt.dates,bt.ves.cd.forecast)
 colnames(bt.ag.forecast) = "FORECAST"
 
 ## What really happened...
@@ -106,65 +74,27 @@ bt.out = cbind(hist.adj.close, bt.ag.forecast, buy.sell(bt.ag.forecast)$Buy.Sell
 names(bt.out)[3] = "Buy.Sell"
 bt.model.acc = acc(bt.out$FORECAST, bt.out$HIST) ## Overall Accuracy
 bt.model.cor = cor(bt.out$FORECAST,bt.out$HIST) ## Correlation
+bt.model.acc;bt.model.cor
 
 ## <--- END BACK TESTING
 
 ## BEGIN FORECAST MODEL --->
 
-## Find matches to create regression models
-fm.ves = find.matches(adj.close,n.hist,n.fore,model="ves", use.cd=FALSE)
-fm.ces = find.matches(adj.close,n.hist,n.fore,model="ces", use.cd=FALSE)
-fm.lin = find.matches(adj.close,n.hist,n.fore,model="linear", use.cd=FALSE)
-
+## Find matches to create regression model
 fm.ves.cd = find.matches(adj.close,n.hist,n.fore,model="ves", use.cd=TRUE)
-fm.ces.cd = find.matches(adj.close,n.hist,n.fore,model="ces", use.cd=TRUE)
-fm.lin.cd = find.matches(adj.close,n.hist,n.fore,model="linear", use.cd=TRUE)
 
-## Calculate regression models
-fm.ves.fit = lm(Y~. , data=fm.ves$rmodel)
-fm.ces.fit = lm(Y~. , data=fm.ces$rmodel)
-fm.lin.fit = lm(Y~. , data=fm.lin$rmodel)
-
+## Calculate regression model
 fm.ves.cd.fit = lm(Y~. , data=fm.ves.cd$rmodel)
-fm.ces.cd.fit = lm(Y~. , data=fm.ces.cd$rmodel)
-fm.lin.cd.fit = lm(Y~. , data=fm.lin.cd$rmodel)
 
-## Building forecast models
-fm.ves.fcast = forecast.lm(fm.ves.fit, newdata=fm.ves$fmodel)
-fm.ves.fcast = fm.ves.fcast$mean
-fm.ves.forecast = extendForecast(fm.dates, round(fm.ves.fcast,4))
-colnames(fm.ves.forecast) = "fm.ves.FORECAST"
-
-fm.ces.fcast = forecast.lm(fm.ces.fit, newdata=fm.ces$fmodel)
-fm.ces.fcast = fm.ces.fcast$mean
-fm.ces.forecast = extendForecast(fm.dates, round(fm.ces.fcast,4))
-fm.ces.forecast = exp(fm.ces.forecast[,1]) ## converting from log to exp
-colnames(fm.ces.forecast) = "fm.ces.FORECAST"
-
-fm.lin.fcast = forecast.lm(fm.lin.fit, newdata=fm.lin$fmodel)
-fm.lin.fcast = fm.lin.fcast$mean
-fm.lin.forecast = extendForecast(fm.dates, round(fm.lin.fcast,4))
-colnames(fm.lin.forecast) = "fm.lin.FORECAST"
-
+## Building forecast model
 fm.ves.cd.fcast = forecast.lm(fm.ves.cd.fit, newdata=fm.ves.cd$fmodel)
 fm.ves.cd.fcast = fm.ves.cd.fcast$mean
 fm.ves.cd.forecast = extendForecast(fm.dates, round(fm.ves.cd.fcast,4))
 colnames(fm.ves.cd.forecast) = "fm.ves.cd.FORECAST"
 
-fm.ces.cd.fcast = forecast.lm(fm.ces.cd.fit, newdata=fm.ces.cd$fmodel)
-fm.ces.cd.fcast = fm.ces.cd.fcast$mean
-fm.ces.cd.forecast = extendForecast(fm.dates, round(fm.ces.cd.fcast,4))
-fm.ces.cd.forecast = exp(fm.ces.cd.forecast[,1]) ## converting from log to exp
-colnames(fm.ces.cd.forecast) = "fm.ces.cd.FORECAST"
-
-fm.lin.cd.fcast = forecast.lm(fm.lin.cd.fit, newdata=fm.lin.cd$fmodel)
-fm.lin.cd.fcast = fm.lin.cd.fcast$mean
-fm.lin.cd.forecast = extendForecast(fm.dates, round(fm.lin.cd.fcast,4))
-colnames(fm.lin.cd.forecast) = "fm.lin.cd.FORECAST"
-
 ## Plot matches
-n.match = NROW(fm.lin$matchindx)
-max.index = fm.lin$matchindx
+n.match = NROW(fm.ves.cd$matchindx)
+max.index = fm.ves.cd$matchindx
 d.matches = index(fm.dates)[1:NROW(fm.dates)]
 plota(adj.close, type='l', col='gray', main=tickers)
 plota.lines(last(adj.close,n.hist), col='blue')
@@ -175,7 +105,7 @@ for(i in 1:n.match) {
 ## Putting it all together
 y = as.xts(last(adj.close,180),
            index(fm.dates)[(NROW(fm.dates)-(n.hist-1)):NROW(fm.dates)])
-z = extendForecast(fm.dates,rowMeans(cbind(fm.ves.forecast,fm.ces.forecast,fm.lin.forecast,fm.ves.cd.forecast,fm.ces.cd.forecast,fm.lin.cd.forecast)))
+z = extendForecast(fm.dates,fm.ves.cd.forecast)
 fm.ag.forecast = rbind(y,z)
 colnames(fm.ag.forecast) = "Adj.Close"
 
@@ -198,20 +128,22 @@ future$Buy.Sell = buy.sell(future$Adj.Close)$Buy.Sell
 
 ## Model specs
 profit = sum(buy.sell(future$Adj.Close)$Buy.Sell*(-future$Adj.Close))
-model.acc = acc(fm.lin$rmodel$Y,fm.lin.fit$fitted.values) ## Model Accuracy
-ur2 = unadj.rsquared(fm.lin.fit)$unadj.rsquared
+model.acc = acc(fm.ves.cd$rmodel$Y,fm.ves.cd.fit$fitted.values) ## Model Accuracy
+ur2 = unadj.rsquared(fm.ves.cd.fit)$unadj.rsquared
+yr.return = last(yearlyReturn(adj.close),1)
 
 ## <--- END FORECAST MODEL
 
 ## OUTPUT --->
 
-report = list(bt.out, bt.profit, bt.model.acc, bt.model.cor, future, profit)
+report = list(bt.out, bt.profit, bt.model.acc, bt.model.cor, future, profit, yr.return)
 names(report)[1] = "Back.Tested.Forecast"
 names(report)[2] = "Back.Tested.Profit"
 names(report)[3] = "Back.Tested.Model.acc"
 names(report)[4] = "Back.Tested.Model.cor"
 names(report)[5] = "Forecast"
 names(report)[6] = "Est.Profit"
+names(report)[7] = "Yearly.Return"
 report
 
 ## <--- OUTPUT
