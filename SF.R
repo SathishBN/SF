@@ -90,7 +90,7 @@ bt.model.acc;bt.model.cor
 ## BEGIN FORECAST MODEL --->
 
 ## Find matches to create regression model
-fm.ves.cd = find.matches(prices,n.hist,n.fore,model="ves", use.cd=TRUE, n.match=round(n.hist*.25))
+fm.ves.cd = find.matches(prices,n.hist,n.fore,model="ves", use.cd=TRUE, n.match=round(n.hist*.3)-4)
 
 # Using top matches, get VIX data and add it to the regression model
 RVX1 = data.frame(VIX[fm.ves.cd$matchindx[1]:(fm.ves.cd$matchindx[1]+n.hist-1)]); colnames(RVX1) = "VX1"
