@@ -37,7 +37,7 @@ bt.dates = data$dates[1:(NROW(SPY)-n.fore)]
 bt.ves.cd = find.matches(bt.adj.close,n.hist,n.fore,model="ves", use.cd=TRUE,n.match=round(n.hist*.3)-4)
 # cor(bt.ves.cd$rmodel$Y,bt.ves.cd$rmodel$X1)
 
-# Using top matches, get VIX and Volume data and add it to the regression model
+# Using top matches, get VIX data and add it to the regression model
 RVX1 = data.frame(VIX[bt.ves.cd$matchindx[1]:(bt.ves.cd$matchindx[1]+n.hist-1)]); colnames(RVX1) = "VX1"
 lnVX1 = log(RVX1); colnames(lnVX1) = "lnVX1"
 
@@ -92,7 +92,7 @@ bt.model.acc;bt.model.cor
 ## Find matches to create regression model
 fm.ves.cd = find.matches(prices,n.hist,n.fore,model="ves", use.cd=TRUE, n.match=round(n.hist*.25))
 
-# Using top matches, get VIX and Volume data and add it to the regression model
+# Using top matches, get VIX data and add it to the regression model
 RVX1 = data.frame(VIX[fm.ves.cd$matchindx[1]:(fm.ves.cd$matchindx[1]+n.hist-1)]); colnames(RVX1) = "VX1"
 lnVX1 = log(RVX1); colnames(lnVX1) = "lnVX1"
 
