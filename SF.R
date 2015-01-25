@@ -24,12 +24,9 @@ bt.prep.remove.symbols(data, 'VIX')
 # Closing SPY prices
 SPY = Cl(data$SPY)
 
-# Natural Log of Volume
-VOL = log(Vo(data$SPY))
-
 prices = SPY
 fm.dates = data$dates
-n.hist=35; n.fore=20
+n.hist=35; n.fore=15
 
 ## BEGIN BACK TESTING --->
 
@@ -37,7 +34,7 @@ bt.adj.close = SPY[1:(NROW(SPY)-n.fore)]
 bt.dates = data$dates[1:(NROW(SPY)-n.fore)]
 
 ## Find matches in historical data
-bt.ves.cd = find.matches(bt.adj.close,n.hist,n.fore,model="ves", use.cd=TRUE,n.match=round(n.hist*.4)-5)
+bt.ves.cd = find.matches(bt.adj.close,n.hist,n.fore,model="ves", use.cd=TRUE,n.match=round(n.hist*.3)-4)
 # cor(bt.ves.cd$rmodel$Y,bt.ves.cd$rmodel$X1)
 
 # Using top matches, get VIX and Volume data and add it to the regression model
@@ -47,9 +44,7 @@ lnVX1 = log(RVX1); colnames(lnVX1) = "lnVX1"
 RVX2 = data.frame(VIX[bt.ves.cd$matchindx[2]:(bt.ves.cd$matchindx[2]+n.hist-1)]); colnames(RVX2) = "VX2"
 lnVX2 = log(RVX2); colnames(lnVX2) = "lnVX2"
 
-VOLX1 = data.frame(VOL[bt.ves.cd$matchindx[1]:(bt.ves.cd$matchindx[1]+n.hist-1)]); colnames(VOLX1) = "VOLX1"
-
-bt.reg.data = cbind(bt.ves.cd$rmodel,RVX1,RVX2,lnVX1,lnVX2,VOLX1)
+bt.reg.data = cbind(bt.ves.cd$rmodel,RVX1,RVX2,lnVX1,lnVX2)
 
 ## Calculate regression model
 bt.ves.cd.fit = lm(Y~. , data=bt.reg.data)
@@ -62,14 +57,12 @@ lnFVX1 = log(FVX1); colnames(lnFVX1) = "lnVX1"
 FVX2 = data.frame(VIX[bt.ves.cd$matchindx[2]:(bt.ves.cd$matchindx[2]+n.fore-1)]); colnames(FVX2) = "VX2"
 lnFVX2 = log(FVX2); colnames(lnFVX2) = "lnVX2"
 
-FVOLX1 = data.frame(VOL[bt.ves.cd$matchindx[1]:(bt.ves.cd$matchindx[1]+n.fore-1)]); colnames(FVOLX1) = "VOLX1"
-
-bt.fcast.data = cbind(bt.ves.cd$fmodel,FVX1,FVX2,lnFVX1,lnFVX2,FVOLX1)
+bt.fcast.data = cbind(bt.ves.cd$fmodel,FVX1,FVX2,lnFVX1,lnFVX2)
 
 bt.ves.cd.fcast = forecast.lm(bt.ves.cd.fit, newdata=bt.fcast.data)
 bt.ves.cd.fcast = bt.ves.cd.fcast$mean
 bt.ves.cd.forecast = extendForecast(bt.dates, round(bt.ves.cd.fcast,4))
-colnames(bt.ves.cd.forecast) = "bt.ves.cd.FORECAST"
+colnames(bt.ves.cd.forecast) = "FORECAST"
 
 ## Combine forecast models
 bt.ag.forecast = extendForecast(bt.dates,bt.ves.cd.forecast)
@@ -82,7 +75,7 @@ colnames(hist.adj.close) = "HISTORY"
 ## Quick comparison
 thm = chart_theme()
 thm$col$line.col = 'gray'
-chart_Series(last(bt.ag.forecast,(n.fore+1)), theme=thm,name=tickers)
+chart_Series(last(bt.ag.forecast,(n.fore+1)), theme=thm,name="SPY")
 add_Series(hist.adj.close,on=1)
 ## GRAY - FORECAST; RED - HISTORICAL
 
@@ -106,9 +99,7 @@ lnVX1 = log(RVX1); colnames(lnVX1) = "lnVX1"
 RVX2 = data.frame(VIX[fm.ves.cd$matchindx[2]:(fm.ves.cd$matchindx[2]+n.hist-1)]); colnames(RVX2) = "VX2"
 lnVX2 = log(RVX2); colnames(lnVX2) = "lnVX2"
 
-VOLX1 = data.frame(VOL[fm.ves.cd$matchindx[1]:(fm.ves.cd$matchindx[1]+n.hist-1)]); colnames(VOLX1) = "VOLX1"
-
-fm.reg.data = cbind(fm.ves.cd$rmodel,RVX1,RVX2,lnVX1,lnVX2,VOLX1)
+fm.reg.data = cbind(fm.ves.cd$rmodel,RVX1,RVX2,lnVX1,lnVX2)
 
 ## Calculate regression model
 fm.ves.cd.fit = lm(Y~. , fm.reg.data)
@@ -121,14 +112,12 @@ lnFVX1 = log(FVX1); colnames(lnFVX1) = "lnVX1"
 FVX2 = data.frame(VIX[fm.ves.cd$matchindx[2]:(fm.ves.cd$matchindx[2]+n.fore-1)]); colnames(FVX2) = "VX2"
 lnFVX2 = log(FVX2); colnames(lnFVX2) = "lnVX2"
 
-FVOLX1 = data.frame(VOL[fm.ves.cd$matchindx[1]:(fm.ves.cd$matchindx[1]+n.fore-1)]); colnames(FVOLX1) = "VOLX1"
-
-fm.fcast.data = cbind(fm.ves.cd$fmodel,FVX1,FVX2,lnFVX1,lnFVX2,FVOLX1)
+fm.fcast.data = cbind(fm.ves.cd$fmodel,FVX1,FVX2,lnFVX1,lnFVX2)
 
 fm.ves.cd.fcast = forecast.lm(fm.ves.cd.fit, newdata=fm.fcast.data )
 fm.ves.cd.fcast = fm.ves.cd.fcast$mean
 fm.ves.cd.forecast = extendForecast(fm.dates, round(fm.ves.cd.fcast,4))
-colnames(fm.ves.cd.forecast) = "fm.ves.cd.FORECAST"
+colnames(fm.ves.cd.forecast) = "FORECAST"
 
 ## Plot matches
 n.match = NROW(fm.ves.cd$matchindx)

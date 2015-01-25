@@ -15,17 +15,17 @@ load.packages('forecast,quantmod')
 ########################################################################################
 
 # LOAD DATA
-ticker = toupper('cop')
+ticker = toupper('SPY')
 data = getSymbols(ticker, src = 'yahoo', from = '1980-01-01', auto.assign = F)
 data = adjustOHLC(data, use.Adjusted=T)
 data = last(data, 252*10) # pull last n years
 summary(data)
 
 # PARAMETERS
-n.query = 190 # periods of history
-n.fore = 60 # forecast this many periods
-n.match = 1 # how many sine/cosine waves each
-n.spec = 25 # how many spectral waves
+n.query = 45 # periods of history
+n.fore = 20 # forecast this many periods
+n.match = 2 # how many sine/cosine waves each
+n.spec = 100 # how many spectral waves
 
 reference = coredata(Ad(data))
 n.data = NROW(reference)
@@ -42,6 +42,7 @@ for (i in 1:n.spec){
   sinwaves = c(sinwaves,s)
 }
 n.waves = NROW(sinwaves)
+plot(sinwaves)
 
 # COMPUTE CORRELATION
 matches = rep(NA, n.waves) # filling a matrix with NAs
@@ -135,7 +136,6 @@ summary(fit)
 mean(1-abs((Y-fit$fitted.values)/Y))  # model accuracy
 
 # COMPARING SPECTRAL MATCH(ES) WITH REAL DATA
-dev.new()
 par(mfrow=c(3,1))
 plot(tail(reference,n.query),type="l",main=ticker,xlab="x", ylab="y")
 plot(df$V1,type="l",main="Sin",xlab="x", ylab="y", ylim=c(-6,6))
@@ -156,7 +156,6 @@ colnames(out) = "Adj.Close"
 colnames(out2) = "Model"
 
 # PLOT
-dev.new()
 thm = chart_theme() 
 thm$col$line.col = 'blue'
 chart_Series(out,theme=thm,name=ticker)
