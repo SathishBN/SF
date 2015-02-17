@@ -3,171 +3,172 @@
 # http://systematicinvestor.wordpress.com/systematic-investor-toolbox/
 ###############################################################################
 setInternet2(TRUE)
-con = gzcon(url('http://www.systematicportfolio.com/sit.gz', 'rb'))
+con <- gzcon(url('http://www.systematicportfolio.com/sit.gz', 'rb'))
 source(con)
 close(con)
 
 library(griffun)
+
 load.packages('forecast,quantmod,svDialogs,lmtest,TTR')
 
-tickers = spl('SPY,^VIX')
+# Disable Sci Notation and supress warnings
+options(scipen=999)
+options(warn=-1)
+
+# ## INPUT BOX
+# sym <- dlgInput("Enter Symbol: ", default="SPY")$res
+# if (!length(sym)) { # The user clicked the cancel button
+#   cat("OK, if you'd rather not, that is fine too...\n")
+# } else {
+#   cat("Gathing data for forecast on ", toupper(spl(sym)), "\n")
+# }
+# tickers <- toupper(spl(sym))
+
+tickers <- spl('SPY')
+
+## ONLY SUPPORTS ONE STOCK CURRENTLY
 
 data <- new.env()
 getSymbols(tickers, src = 'yahoo', from = '1980-01-01', env = data, auto.assign = T)
-for(i in data$symbolnames) data[[i]] = adjustOHLC(data[[i]], use.Adjusted=T)
-bt.prep(data, align='remove.na', fill.gaps = T)
+for(i in ls(data)) data[[i]] = adjustOHLC(data[[i]], use.Adjusted=T)
+quotes <- getQuote(tickers)
+for(i in ls(data))
+  if( last(index(data[[i]])) < as.Date(quotes[i, 'Trade Time']) ) {
+    data[[i]] <- rbind( data[[i]], make.xts(quotes[i, spl('Open,High,Low,Last,Volume,Last')],
+                                            as.Date(quotes[i, 'Trade Time'])))
+  }
+bt.prep(data)
+summary(data$prices)
 
-# Closing VIX prices
-VIX = Cl(data$VIX)
-bt.prep.remove.symbols(data, 'VIX')
 
-# Closing SPY prices
-SPY = Cl(data$SPY)
+## BEGIN DAILY BACKTESTING AND FORECAST--->
 
-prices = SPY
-fm.dates = data$dates
-n.hist=35; n.fore=15
+n.hist <- 35; n.fore <- 5 ## <- daily
+SPY <- data$SPY
 
-## BEGIN BACK TESTING --->
+# Get Calculate Open/High and Open/Lo for X variables
+SPY$OpHi <-  -1 + (Op(SPY)/rollapply(mlag(Hi(SPY),1), n.hist, max))
+SPY$OpLo <-  -1 + (Op(SPY)/rollapply(mlag(Lo(SPY),1), n.hist, max))
+SPY[is.na(SPY)] <- 0
 
-bt.adj.close = SPY[1:(NROW(SPY)-n.fore)]
-bt.dates = data$dates[1:(NROW(SPY)-n.fore)]
+high <- Hi(SPY)
+bt.high <- high[1:(NROW(high)-n.fore)]
+bt.high <- last(bt.high,n.hist)
+bt.high.xvar <- SPY$OpHi[1:(NROW(high)-n.fore)]
+bt.high.xvar <- last(bt.high.xvar,n.hist)
 
-## Find matches in historical data
-bt.ves.cd = find.matches(bt.adj.close,n.hist,n.fore,model="ves", use.cd=TRUE,n.match=round(n.hist*.3)-4)
-# cor(bt.ves.cd$rmodel$Y,bt.ves.cd$rmodel$X1)
+low <- Lo(SPY)
+bt.low <- low[1:(NROW(low)-n.fore)]
+bt.low <- last(bt.low,n.hist)
+bt.low.xvar <- SPY$OpLo[1:(NROW(low)-n.fore)]
+bt.low.xvar <- last(bt.low.xvar,n.hist)
 
-# Using top matches, get VIX data and add it to the regression model
-RVX1 = data.frame(VIX[bt.ves.cd$matchindx[1]:(bt.ves.cd$matchindx[1]+n.hist-1)]); colnames(RVX1) = "VX1"
-lnVX1 = log(RVX1); colnames(lnVX1) = "lnVX1"
+bt.high.reg.data <- data.frame(cbind(bt.high,bt.high.xvar)); colnames(bt.high.reg.data) <- c("Y","X1")
+bt.low.reg.data <- data.frame(cbind(bt.low,bt.low.xvar)); colnames(bt.low.reg.data) <- c("Y","X1")
 
-RVX2 = data.frame(VIX[bt.ves.cd$matchindx[2]:(bt.ves.cd$matchindx[2]+n.hist-1)]); colnames(RVX2) = "VX2"
-lnVX2 = log(RVX2); colnames(lnVX2) = "lnVX2"
-
-bt.reg.data = cbind(bt.ves.cd$rmodel,RVX1,RVX2,lnVX1,lnVX2)
-
-## Calculate regression model
-bt.ves.cd.fit = lm(Y~. , data=bt.reg.data)
-summary(bt.ves.cd.fit)
-
-## Building forecast model
-FVX1 = data.frame(VIX[bt.ves.cd$matchindx[1]:(bt.ves.cd$matchindx[1]+n.fore-1)]); colnames(FVX1) = "VX1"
-lnFVX1 = log(FVX1); colnames(lnFVX1) = "lnVX1"
-
-FVX2 = data.frame(VIX[bt.ves.cd$matchindx[2]:(bt.ves.cd$matchindx[2]+n.fore-1)]); colnames(FVX2) = "VX2"
-lnFVX2 = log(FVX2); colnames(lnFVX2) = "lnVX2"
-
-bt.fcast.data = cbind(bt.ves.cd$fmodel,FVX1,FVX2,lnFVX1,lnFVX2)
-
-bt.ves.cd.fcast = forecast.lm(bt.ves.cd.fit, newdata=bt.fcast.data)
-bt.ves.cd.fcast = bt.ves.cd.fcast$mean
-bt.ves.cd.forecast = extendForecast(bt.dates, round(bt.ves.cd.fcast,4))
-colnames(bt.ves.cd.forecast) = "FORECAST"
-
-## Combine forecast models
-bt.ag.forecast = extendForecast(bt.dates,bt.ves.cd.forecast)
-colnames(bt.ag.forecast) = "FORECAST"
-
-## What really happened...
-hist.adj.close = prices[(NROW(prices)-(n.fore-1)):NROW(prices)]
-colnames(hist.adj.close) = "HISTORY"
-
-## Quick comparison
-thm = chart_theme()
-thm$col$line.col = 'gray'
-chart_Series(last(bt.ag.forecast,(n.fore+1)), theme=thm,name="SPY")
-add_Series(hist.adj.close,on=1)
-## GRAY - FORECAST; RED - HISTORICAL
-
-## Model specs
-bt.profit = sum(buy.sell(bt.ag.forecast)$Buy.Sell*(-hist.adj.close))
-bt.out = cbind(hist.adj.close, bt.ag.forecast, buy.sell(bt.ag.forecast)$Buy.Sell)
-names(bt.out)[3] = "Buy.Sell"
-bt.model.acc = acc(bt.out$FORECAST, bt.out$HIST) ## Overall Accuracy
-bt.model.cor = cor(bt.out$FORECAST,bt.out$HIST) ## Correlation
-bt.model.acc;bt.model.cor
-
-## BEGIN FORECAST MODEL --->
-
-## Find matches to create regression model
-fm.ves.cd = find.matches(prices,n.hist,n.fore,model="ves", use.cd=TRUE, n.match=round(n.hist*.3)-4)
-
-# Using top matches, get VIX data and add it to the regression model
-RVX1 = data.frame(VIX[fm.ves.cd$matchindx[1]:(fm.ves.cd$matchindx[1]+n.hist-1)]); colnames(RVX1) = "VX1"
-lnVX1 = log(RVX1); colnames(lnVX1) = "lnVX1"
-
-RVX2 = data.frame(VIX[fm.ves.cd$matchindx[2]:(fm.ves.cd$matchindx[2]+n.hist-1)]); colnames(RVX2) = "VX2"
-lnVX2 = log(RVX2); colnames(lnVX2) = "lnVX2"
-
-fm.reg.data = cbind(fm.ves.cd$rmodel,RVX1,RVX2,lnVX1,lnVX2)
-
-## Calculate regression model
-fm.ves.cd.fit = lm(Y~. , fm.reg.data)
-summary(fm.ves.cd.fit)
+## Calculate regression models for high and low
+bt.high.fit <- lm(Y~. , data=bt.high.reg.data)
+bt.low.fit <- lm(Y~. , data=bt.low.reg.data)
 
 ## Building forecast model
-FVX1 = data.frame(VIX[fm.ves.cd$matchindx[1]:(fm.ves.cd$matchindx[1]+n.fore-1)]); colnames(FVX1) = "VX1"
-lnFVX1 = log(FVX1); colnames(lnFVX1) = "lnVX1"
 
-FVX2 = data.frame(VIX[fm.ves.cd$matchindx[2]:(fm.ves.cd$matchindx[2]+n.fore-1)]); colnames(FVX2) = "VX2"
-lnFVX2 = log(FVX2); colnames(lnFVX2) = "lnVX2"
+bt.high.fcast.data <- last(SPY$OpHi,n.fore); colnames(bt.high.fcast.data) <- c("X1")
+bt.low.fcast.data <- last(SPY$OpLo,n.fore); colnames(bt.low.fcast.data) <- c("X1")
 
-fm.fcast.data = cbind(fm.ves.cd$fmodel,FVX1,FVX2,lnFVX1,lnFVX2)
+bt.high.fcast <- forecast.lm(bt.high.fit, newdata=bt.high.fcast.data)
+bt.low.fcast <- forecast.lm(bt.low.fit, newdata=bt.low.fcast.data)
 
-fm.ves.cd.fcast = forecast.lm(fm.ves.cd.fit, newdata=fm.fcast.data )
-fm.ves.cd.fcast = fm.ves.cd.fcast$mean
-fm.ves.cd.forecast = extendForecast(fm.dates, round(fm.ves.cd.fcast,4))
-colnames(fm.ves.cd.forecast) = "FORECAST"
+bt.high.fcast <- as.xts(bt.high.fcast$mean); colnames(bt.high.fcast) <- "Forecast.High"
+bt.low.fcast <- as.xts(bt.low.fcast$mean); colnames(bt.low.fcast) <- "Forecast.Low"
 
-## Plot matches
-n.match = NROW(fm.ves.cd$matchindx)
-max.index = fm.ves.cd$matchindx
-d.matches = index(fm.dates)[1:NROW(fm.dates)]
-plota(prices, type='l', col='gray', main="SPY")
-plota.lines(last(prices,n.hist), col='blue')
-for(i in 1:n.match) {
-  plota.lines(prices[max.index[i]:(max.index[i]+n.hist)], col='red')
-}
+## Combine fits and forecast
+daily.fitted.High <- rbind(round(as.xts(bt.high.fit$fitted.values),2),bt.high.fcast)
+daily.fitted.Low <- rbind(round(as.xts(bt.low.fit$fitted.values),2),bt.low.fcast)
 
-## Putting it all together
-y = as.xts(last(prices,180),
-           index(fm.dates)[(NROW(fm.dates)-(n.hist-1)):NROW(fm.dates)])
-z = extendForecast(fm.dates,fm.ves.cd.forecast)
-fm.ag.forecast = rbind(y,z)
-colnames(fm.ag.forecast) = "Close"
+## Quick comparison of what really happened...
+thm <- chart_theme()
+# thm$col$line.col <- 'gray'
+chart_Series(last(OHLC(SPY),n.hist+n.fore), theme=thm,name="SPY vs Hi/Lo Forecast")
+add_Series(daily.fitted.High,on=1)
+add_Series(daily.fitted.Low,on=1)
 
-## Quick technical analysis
-thm = chart_theme()
-thm$col$line.col = 'blue'
-chart_Series(fm.ag.forecast, theme=thm,name="SPY")
-add_Series(last(fm.ag.forecast,(n.fore+1)),on=1)
-add_RSI(n=14)
-add_BBands()
+## Check Forecast Accuracy
+bt.high.acc <- acc(last(Hi(SPY),n.fore), last(daily.fitted.High,n.fore))
+bt.low.acc <- acc(last(Lo(SPY),n.fore), last(daily.fitted.Low,n.fore))
 
-## Future Prices
-future = tail(fm.ag.forecast, n.fore)
-future$Buy.Sell = buy.sell(future$Close)$Buy.Sell
+# Check Forecast Correlation
+bt.high.cor <- cor(last(Hi(SPY),n.fore), last(daily.fitted.High,n.fore))
+bt.low.cor <- cor(last(Lo(SPY),n.fore), last(daily.fitted.Low,n.fore))
 
-## Model specs
-profit = sum(buy.sell(future$Close)$Buy.Sell*(-future$Close))
-model.acc = acc(fm.ves.cd$rmodel$Y,fm.ves.cd.fit$fitted.values) ## Model Accuracy
-ur2 = unadj.rsquared(fm.ves.cd.fit)$unadj.rsquared
-yr.return = last(yearlyReturn(prices),1)
+daily.output <- cbind(last(Hi(SPY),n.fore),bt.high.fcast,last(Lo(SPY),n.fore),bt.low.fcast)
+daily.bt.acc <- cbind(bt.high.acc,bt.low.acc)
 
-## <--- END FORECAST MODEL
+## <--- END DAILY BACKTESTING AND FORECAST
 
-## OUTPUT --->
+## BEGIN WEEKLY BACKTESTING AND FORECAST--->
 
-report = list(bt.out, bt.profit, bt.model.acc, bt.model.cor, future, profit, yr.return)
-names(report)[1] = "Back.Tested.Forecast"
-names(report)[2] = "Back.Tested.Profit"
-names(report)[3] = "Back.Tested.Model.acc"
-names(report)[4] = "Back.Tested.Model.cor"
-names(report)[5] = "Forecast"
-names(report)[6] = "Est.Profit"
-names(report)[7] = "Yearly.Return"
-report
+n.hist = 13; n.fore = 3 ## <- Weekly
+SPY = to.weekly(data$SPY)
 
-## <--- OUTPUT
+# SPY prices
+SPY$OpHi <-  -1 + (Op(SPY)/rollapply(mlag(Hi(SPY),1), 2, max))
+SPY$OpLo <-  -1 + (Op(SPY)/rollapply(mlag(Lo(SPY),1), 5, max))
+SPY[is.na(SPY)] <- 0
 
-##########################################################################
+high <- Hi(SPY)
+bt.high <- high[1:(NROW(high)-n.fore)]
+bt.high <- last(bt.high,n.hist)
+bt.high.xvar <- SPY$OpHi[1:(NROW(high)-n.fore)]
+bt.high.xvar <- last(bt.high.xvar,n.hist)
+
+low <- Lo(SPY)
+bt.low <- low[1:(NROW(low)-n.fore)]
+bt.low <- last(bt.low,n.hist)
+bt.low.xvar <- SPY$OpLo[1:(NROW(low)-n.fore)]
+bt.low.xvar <- last(bt.low.xvar,n.hist)
+
+bt.high.reg.data <- data.frame(cbind(bt.high,bt.high.xvar)); colnames(bt.high.reg.data) <- c("Y","X1")
+bt.low.reg.data <- data.frame(cbind(bt.low,bt.low.xvar)); colnames(bt.low.reg.data) <- c("Y","X1")
+
+## Calculate regression models for high and low
+bt.high.fit <- lm(Y~. , data=bt.high.reg.data)
+bt.low.fit <- lm(Y~. , data=bt.low.reg.data)
+
+## Building forecast model
+
+bt.high.fcast.data <- last(SPY$OpHi,n.fore); colnames(bt.high.fcast.data) <- c("X1")
+bt.low.fcast.data <- last(SPY$OpLo,n.fore); colnames(bt.low.fcast.data) <- c("X1")
+
+bt.high.fcast <- forecast.lm(bt.high.fit, newdata=bt.high.fcast.data)
+bt.low.fcast <- forecast.lm(bt.low.fit, newdata=bt.low.fcast.data)
+
+bt.high.fcast <- as.xts(bt.high.fcast$mean); colnames(bt.high.fcast) <- "Forecast.High"
+bt.low.fcast <- as.xts(bt.low.fcast$mean); colnames(bt.low.fcast) <- "Forecast.Low"
+
+## Combine fits and forecast
+daily.fitted.High <- rbind(round(as.xts(bt.high.fit$fitted.values),2),bt.high.fcast)
+daily.fitted.Low <- rbind(round(as.xts(bt.low.fit$fitted.values),2),bt.low.fcast)
+
+## Quick comparison of what really happened...
+# thm <- chart_theme()
+# # thm$col$line.col <- 'gray'
+# chart_Series(last(OHLC(SPY),n.hist+n.fore), theme=thm,name="SPY vs Hi/Lo Forecast")
+# add_Series(daily.fitted.High,on=1)
+# add_Series(daily.fitted.Low,on=1)
+
+## Check Forecast Accuracy
+bt.high.acc <- acc(last(Hi(SPY),n.fore), last(daily.fitted.High,n.fore))
+bt.low.acc <- acc(last(Lo(SPY),n.fore), last(daily.fitted.Low,n.fore))
+
+# Check Forecast Correlation
+bt.high.cor <- cor(last(Hi(SPY),n.fore), last(daily.fitted.High,n.fore))
+bt.low.cor <- cor(last(Lo(SPY),n.fore), last(daily.fitted.Low,n.fore))
+
+# Weekly Output
+weekly.output <- cbind(last(Hi(SPY),n.fore),bt.high.fcast,last(Lo(SPY),n.fore),bt.low.fcast)
+weekly.bt.acc <- cbind(bt.high.acc,bt.low.acc)
+
+## <--- END WEEKLY BACKTESTING AND FORECAST
+
+weekly.output; weekly.bt.acc
+daily.output; daily.bt.acc
