@@ -46,34 +46,42 @@ summary(data$prices)
 n.hist <- 35; n.fore <- 5 ## <- daily
 SPY <- data$SPY
 
-# Get Calculate Open/High and Open/Lo for X variables
+## Get Calculate Open/High and Open/Lo for X variables
 SPY$OpHi <-  -1 + (Op(SPY)/rollapply(mlag(Hi(SPY),1), n.hist, max))
 SPY$OpLo <-  -1 + (Op(SPY)/rollapply(mlag(Lo(SPY),1), n.hist, max))
 SPY[is.na(SPY)] <- 0
 
+## Get additional tech specs
+SPY$RSI <- RSI(SPY$SPY.Open,2)
+SPY$DVI <- DVI(SPY$SPY.Open)$DVI
+
+## Get X values for high
 high <- Hi(SPY)
 bt.high <- high[1:(NROW(high)-n.fore)]
 bt.high <- last(bt.high,n.hist)
-bt.high.xvar <- SPY$OpHi[1:(NROW(high)-n.fore)]
+bt.high.xvar <- SPY[1:(NROW(high)-n.fore),c(7,9:10)]
 bt.high.xvar <- last(bt.high.xvar,n.hist)
 
+## Get X values for low
 low <- Lo(SPY)
 bt.low <- low[1:(NROW(low)-n.fore)]
 bt.low <- last(bt.low,n.hist)
-bt.low.xvar <- SPY$OpLo[1:(NROW(low)-n.fore)]
+bt.low.xvar <- SPY[1:(NROW(low)-n.fore),c(8:10)]
 bt.low.xvar <- last(bt.low.xvar,n.hist)
 
-bt.high.reg.data <- data.frame(cbind(bt.high,bt.high.xvar)); colnames(bt.high.reg.data) <- c("Y","X1")
-bt.low.reg.data <- data.frame(cbind(bt.low,bt.low.xvar)); colnames(bt.low.reg.data) <- c("Y","X1")
+## Data frame for regression
+bt.high.reg.data <- data.frame(cbind(bt.high,bt.high.xvar)); colnames(bt.high.reg.data) <- c("Y","X1","X2","X3")
+bt.low.reg.data <- data.frame(cbind(bt.low,bt.low.xvar)); colnames(bt.low.reg.data) <- c("Y","X1","X2","X3")
 
 ## Calculate regression models for high and low
 bt.high.fit <- lm(Y~. , data=bt.high.reg.data)
 bt.low.fit <- lm(Y~. , data=bt.low.reg.data)
 
-## Building forecast model
+# summary(bt.high.fit);summary(bt.low.fit)
 
-bt.high.fcast.data <- last(SPY$OpHi,n.fore); colnames(bt.high.fcast.data) <- c("X1")
-bt.low.fcast.data <- last(SPY$OpLo,n.fore); colnames(bt.low.fcast.data) <- c("X1")
+## Building forecast model
+bt.high.fcast.data <- last(SPY[,c(7,9:10)],n.fore); colnames(bt.high.fcast.data) <- c("X1","X2","X3")
+bt.low.fcast.data <- last(SPY[,c(8:10)],n.fore); colnames(bt.low.fcast.data) <- c("X1","X2","X3")
 
 bt.high.fcast <- forecast.lm(bt.high.fit, newdata=bt.high.fcast.data)
 bt.low.fcast <- forecast.lm(bt.low.fit, newdata=bt.low.fcast.data)
@@ -96,10 +104,11 @@ add_Series(daily.fitted.Low,on=1)
 bt.high.acc <- acc(last(Hi(SPY),n.fore), last(daily.fitted.High,n.fore))
 bt.low.acc <- acc(last(Lo(SPY),n.fore), last(daily.fitted.Low,n.fore))
 
-# Check Forecast Correlation
+## Check Forecast Correlation
 bt.high.cor <- cor(last(Hi(SPY),n.fore), last(daily.fitted.High,n.fore))
 bt.low.cor <- cor(last(Lo(SPY),n.fore), last(daily.fitted.Low,n.fore))
 
+## Daily output
 daily.output <- cbind(last(Hi(SPY),n.fore),bt.high.fcast,last(Lo(SPY),n.fore),bt.low.fcast)
 daily.bt.acc <- cbind(bt.high.acc,bt.low.acc)
 
@@ -110,7 +119,7 @@ daily.bt.acc <- cbind(bt.high.acc,bt.low.acc)
 n.hist = 13; n.fore = 3 ## <- Weekly
 SPY = to.weekly(data$SPY)
 
-# SPY prices
+## SPY prices
 SPY$OpHi <-  -1 + (Op(SPY)/rollapply(mlag(Hi(SPY),1), 2, max))
 SPY$OpLo <-  -1 + (Op(SPY)/rollapply(mlag(Lo(SPY),1), 5, max))
 SPY[is.na(SPY)] <- 0
@@ -160,11 +169,11 @@ daily.fitted.Low <- rbind(round(as.xts(bt.low.fit$fitted.values),2),bt.low.fcast
 bt.high.acc <- acc(last(Hi(SPY),n.fore), last(daily.fitted.High,n.fore))
 bt.low.acc <- acc(last(Lo(SPY),n.fore), last(daily.fitted.Low,n.fore))
 
-# Check Forecast Correlation
+## Check Forecast Correlation
 bt.high.cor <- cor(last(Hi(SPY),n.fore), last(daily.fitted.High,n.fore))
 bt.low.cor <- cor(last(Lo(SPY),n.fore), last(daily.fitted.Low,n.fore))
 
-# Weekly Output
+## Weekly Output
 weekly.output <- cbind(last(Hi(SPY),n.fore),bt.high.fcast,last(Lo(SPY),n.fore),bt.low.fcast)
 weekly.bt.acc <- cbind(bt.high.acc,bt.low.acc)
 
