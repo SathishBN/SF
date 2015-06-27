@@ -37,8 +37,8 @@ HiLag2 <- mlag(Hi(SPY),2)
 LoLag1 <- mlag(Lo(SPY),1)
 LoLag2 <- mlag(Lo(SPY),2)
 
-SPY$GrowthHigh <- (-1+(Hi(SPY)/HiLag1))
-SPY$GrowthLow <- (-1+(Lo(SPY)/LoLag1))
+SPY$GrowthH <- (-1+(Hi(SPY)/HiLag1))
+SPY$GrowthL <- (-1+(Lo(SPY)/LoLag1))
 SPY$OPH <- (-1+Op(SPY)/HiLag1)
 SPY$OPL <- (-1+Op(SPY)/LoLag1)
 SPY$OPPH <- (-1+(Op(SPY)/HiLag2))
@@ -73,14 +73,16 @@ bt.low.fcast <- forecast.lm(bt.low.fit, newdata=bt.low.fcast.data)
 
 # Forecast Results
 
-bt.high.fcast <- as.xts(cbind(data.frame(tail(HiLag1,bt)),data.frame(bt.high.fcast$mean)))
-colnames(bt.high.fcast) <- c("PH","HighGrowth")
+bt.high.fcast <- as.xts(cbind(data.frame(tail(Hi(SPY),bt)),data.frame(tail(HiLag1,bt)),data.frame(bt.high.fcast$mean)))
+colnames(bt.high.fcast) <- c("Hi","PH","HighGrowth")
 bt.high.fcast$Forecast.High <- (1+bt.high.fcast$HighGrowth) * bt.high.fcast$PH
-acc(bt.high.fcast$Forecast.High,bt.high.fcast$PH)
+bt.high.fcast; acc(bt.high.fcast$Hi,bt.high.fcast$Forecast.High)
 
-bt.low.fcast <- as.xts(cbind(data.frame(tail(LoLag1,bt)),data.frame(bt.low.fcast$mean)))
-colnames(bt.low.fcast) <- c("PL","LowGrowth")
+bt.low.fcast <- as.xts(cbind(data.frame(tail(Lo(SPY),bt)),data.frame(tail(LoLag1,bt)),data.frame(bt.low.fcast$mean)))
+colnames(bt.low.fcast) <- c("Lo","PL","LowGrowth")
 bt.low.fcast$Forecast.low <- (1+bt.low.fcast$LowGrowth) * bt.low.fcast$PL
-acc(bt.low.fcast$Forecast.low,bt.low.fcast$PL)
+bt.low.fcast; acc(bt.low.fcast$Lo,bt.low.fcast$Forecast.low)
+
+# last(bt.high.fcast[,4]); last(bt.low.fcast[,4])
 
 ## <--- END BACKTESTING AND (N) PERIOD FORECAST
