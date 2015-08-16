@@ -1,7 +1,7 @@
-# References: Predictability of the daily high and low of the S&P 500 index by Clive Jones
+# References: Predictability of the month high and low of the S&P 500 index by Clive Jones
 # Method is called EVPA for Extreme Value Prediction Algorithm
-# Predicts the high and low price for the upcoming week for SPY
-# Suggested to run time for this script is Monday - 9:50 AM EST 
+# Predicts the high and low price for the upcoming month for SPY
+# Suggested to run time for this script is first day of each month - 9:50 AM EST
 
 library(griffun)
 load.packages('forecast,quantmod,svDialogs,lmtest,TTR')
@@ -28,9 +28,9 @@ summary(data$prices)
 
 ## Forecast will include last n days plus the current day
 SPY <- data$SPY
-SPY <- to.weekly(data$SPY)
+SPY <- to.monthly(data$SPY)
 indx <- round(nrow(SPY)*0.8) # grab the last n% of the dataset
-bt <- 20 # how many periods are OOS?
+bt <- 12 # how many periods are OOS?
 
 ## Create independent variables
 HiLag1 <- mlag(Hi(SPY),1)
@@ -72,13 +72,13 @@ bt.high.fcast <- forecast.lm(bt.high.fit, newdata=bt.high.fcast.data)
 bt.low.fcast <- forecast.lm(bt.low.fit, newdata=bt.low.fcast.data)
 
 # Forecast Results
-bt.high.fcast <- as.xts(cbind(data.frame(tail(Hi(SPY),bt)),data.frame(tail(HiLag1,bt)),data.frame(bt.high.fcast$mean)))
+bt.high.fcast <- cbind(data.frame(tail(Hi(SPY),bt)),data.frame(tail(HiLag1,bt)),data.frame(bt.high.fcast$mean))
 colnames(bt.high.fcast) <- c("Hi","PH","HighGrowth")
 bt.high.fcast$Forecast.High <- (1+bt.high.fcast$HighGrowth) * bt.high.fcast$PH
 bt.high.fcast
 bt.high.acc <- round(acc(bt.high.fcast$Hi,bt.high.fcast$Forecast.High),3) * 100
 
-bt.low.fcast <- as.xts(cbind(data.frame(tail(Lo(SPY),bt)),data.frame(tail(LoLag1,bt)),data.frame(bt.low.fcast$mean)))
+bt.low.fcast <- cbind(data.frame(tail(Lo(SPY),bt)),data.frame(tail(LoLag1,bt)),data.frame(bt.low.fcast$mean))
 colnames(bt.low.fcast) <- c("Lo","PL","LowGrowth")
 bt.low.fcast$Forecast.low <- (1+bt.low.fcast$LowGrowth) * bt.low.fcast$PL
 bt.low.fcast
@@ -104,7 +104,7 @@ push.text <- paste0("Currently: $",current.price,"    Forecast: $",
 
 # Send note through Pushbullet
 api <- "https://api.pushbullet.com/api/pushes"
-note <- list(type='note', title='SPY Weekly Forecast', body=push.text)
+note <- list(type='note', title='SPY Monthly Forecast', body=push.text)
 invisible(POST(api, authenticate(wag.api.key, ""), body=note))
 invisible(POST(api, authenticate(jdr.api.key, ""), body=note))
 
