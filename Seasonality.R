@@ -78,7 +78,7 @@ statsNext<-as.data.frame(t(statsNext))
 statsNext <- statsNext[order(-statsNext[,1], -statsNext[,2]),]
 
 # CURRENT MONTH
-statsCurr.OUT <- first(statsNext[,1:2],5)
+statsCurr.OUT <- first(statsCurr[,1:2],5)
 # NEXT MONTH
 statsNext.OUT <- first(statsNext[,1:2],5)
 
